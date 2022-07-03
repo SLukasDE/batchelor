@@ -9,7 +9,7 @@
 #include <esl/io/output/String.h>
 #include <esl/utility/HttpMethod.h>
 #include <esl/utility/MIME.h>
-#include <esl/system/stacktrace/IStacktrace.h>
+#include <esl/system/Stacktrace.h>
 
 #include <map>
 #include <stdexcept>

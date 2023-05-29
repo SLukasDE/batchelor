@@ -1,0 +1,23 @@
+<context>
+	<library file="./build/batchelor-head/1.5.0/default/architecture/linux-gcc/link-dynamic/libbatchelor-head.so"/>
+	
+	<database id="my-db" implementation="eslx/database/SQLiteConnectionFactory">
+		<!-- parameter key="URI" value="file:my.db?mode=rw"/ -->
+		<parameter key="URI" value="file:test?mode=memory"/>
+	</database>
+	
+	<http-server https="false">
+		<parameter key="threads" value="4"/>
+		<parameter key="port" value="8080"/>
+		
+		<context implementation="jerry/http-host">
+			<parameter key="server-name" value="*"/>
+			<context>
+				<http-requesthandler implementation="batchelor-head">
+					<parameter key="db-connection-factory" value="my-db"/>
+				</http-requesthandler>
+			</context>
+		</context>
+	</http-server>
+
+</context>

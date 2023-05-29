@@ -3,6 +3,7 @@
 
 #include "sergut/Util.h"
 
+#include <memory>
 #include <string>
 
 namespace batchelor {
@@ -10,6 +11,15 @@ namespace service {
 namespace schemas {
 
 struct Setting {
+	inline static Setting make(std::string aKey, std::string aValue) {
+		Setting setting;
+
+		setting.key = std::move(aKey);
+		setting.value = std::move(aValue);
+
+		return setting;
+	}
+
 	std::string key;
 	std::string value;
 };

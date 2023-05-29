@@ -1,5 +1,5 @@
-#ifndef BATCHELOR_SERVICE_SCHEMAS_JOB_H_
-#define BATCHELOR_SERVICE_SCHEMAS_JOB_H_
+#ifndef BATCHELOR_SERVICE_SCHEMAS_RUNCONFIGURATION_H_
+#define BATCHELOR_SERVICE_SCHEMAS_RUNCONFIGURATION_H_
 
 #include <batchelor/service/schemas/Setting.h>
 
@@ -12,15 +12,15 @@ namespace batchelor {
 namespace service {
 namespace schemas {
 
-struct Job {
+struct RunConfiguration {
 	std::string jobId;
-	std::string procedureId;
+	std::string batchId;
 	std::vector<Setting> settings;
 };
 
-SERGUT_FUNCTION(Job, data, ar) {
+SERGUT_FUNCTION(RunConfiguration, data, ar) {
     ar & SERGUT_MMEMBER(data, jobId)
-       & SERGUT_MMEMBER(data, procedureId)
+       & SERGUT_MMEMBER(data, batchId)
        & SERGUT_NESTED_MMEMBER(data, settings, settings);
 }
 
@@ -28,4 +28,4 @@ SERGUT_FUNCTION(Job, data, ar) {
 } /* namespace service */
 } /* namespace batchelor */
 
-#endif /* BATCHELOR_SERVICE_SCHEMAS_JOB_H_ */
+#endif /* BATCHELOR_SERVICE_SCHEMAS_RUNCONFIGURATION_H_ */

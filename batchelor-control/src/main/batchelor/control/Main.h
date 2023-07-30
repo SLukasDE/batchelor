@@ -20,7 +20,6 @@ public:
 
 	void sendEvent();
 	void waitTask();
-	void cancelTask();
 	void signalTask();
 	void showTask();
 	void showTasks();

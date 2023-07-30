@@ -29,9 +29,6 @@ Main::Main(const Options& aOptions)
 	case Command::waitTask:
 		waitTask();
 		break;
-	case Command::cancelTask:
-		cancelTask();
-		break;
 	case Command::signalTask:
 		signalTask();
 		break;
@@ -83,10 +80,6 @@ esl::com::http::client::ConnectionFactory& Main::getConnectionFactory() {
 }
 
 void Main::waitTask() {
-
-}
-
-void Main::cancelTask() {
 
 }
 

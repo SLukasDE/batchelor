@@ -38,11 +38,8 @@ public:
 	void setTaskId(const char* taskId);
 	const std::string& getTaskId() const noexcept;
 
-	void setSignalName(const char* signalName);
-	const std::string& getSignalName() const noexcept;
-
-	void setSignalNumber(const char* signalNumber);
-	int getSignalNumber() const noexcept;
+	void setSignal(const char* signalName);
+	const std::string& getSignal() const noexcept;
 
 	void setState(const char* state);
 	State getState() const;
@@ -69,8 +66,7 @@ private:
 	std::string condition;
 	bool wait = false;
 	std::string taskId;
-	std::string signalName;
-	int signalNumber = -1;
+	std::string signal;
 	std::unique_ptr<State> state;
 	std::string eventNotAfter;
 	std::string eventNotBefore;
@@ -80,14 +76,7 @@ private:
 	std::string currentPassword;
 	std::vector<Server> servers;
 };
-/*
-std::cout << "  batchelor send-event   [CONNECTION OPTIONS] --event-type <event-type> [--priority <priority>] [--setting <key> <value>] [--condition <condition>] [--wait]\n";
-std::cout << "  batchelor wait-task    [CONNECTION OPTIONS] --task-id <task-id>\n";
-std::cout << "  batchelor cancel-task  [CONNECTION OPTIONS] --task-id <task-id>\n";
-std::cout << "  batchelor signal-task  [CONNECTION OPTIONS] --task-id <task-id> [--signal-name <signal-name> | --signal-no <signal number>]\n";
-std::cout << "  batchelor show-task    [CONNECTION OPTIONS] --task-id <task-id>\n";
-std::cout << "  batchelor show-tasks   [CONNECTION OPTIONS] [--state <state>] [--event-not-after <timestamp>] [--event-not-before <timestamp>]\n";
-*/
+
 } /* namespace control */
 } /* namespace batchelor */
 

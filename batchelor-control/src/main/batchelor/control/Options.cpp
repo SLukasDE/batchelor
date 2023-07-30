@@ -11,7 +11,6 @@ namespace {
 static const std::string commandStrHelp = "help";
 static const std::string commandStrSendEvent = "send-event";
 static const std::string commandStrWaitTask = "wait-task";
-static const std::string commandStrCancelTask = "cancel-task";
 static const std::string commandStrSignalTask = "signal-task";
 static const std::string commandStrShowTask = "show-task";
 static const std::string commandStrShowTasks = "show-tasks";
@@ -24,8 +23,6 @@ const std::string& commandToStr(Command command) noexcept {
 		return commandStrSendEvent;
 	case Command::waitTask:
 		return commandStrWaitTask;
-	case Command::cancelTask:
-		return commandStrCancelTask;
 	case Command::signalTask:
 		return commandStrSignalTask;
 	case Command::showTask:
@@ -48,9 +45,6 @@ Command strToCommand(const std::string& commandStr) {
 	}
 	if(commandStr == commandStrWaitTask) {
 		return Command::waitTask;
-	}
-	if(commandStr == commandStrCancelTask) {
-		return Command::cancelTask;
 	}
 	if(commandStr == commandStrSignalTask) {
 		return Command::signalTask;
@@ -113,7 +107,7 @@ Options::Options(int argc, const char* argv[]) {
 			addSetting(i+1 < argc ? argv[i+1] : nullptr, i+2 < argc ? argv[i+2] : nullptr);
 			i = i+2;
 		}
-		else if(currentArg == "-s"  || currentArg == "--condition") {
+		else if(currentArg == "-c"  || currentArg == "--condition") {
 			setCondition(i+1 < argc ? argv[i+1] : nullptr);
 			++i;
 		}
@@ -124,12 +118,8 @@ Options::Options(int argc, const char* argv[]) {
 			setTaskId(i+1 < argc ? argv[i+1] : nullptr);
 			++i;
 		}
-		else if(currentArg == "-sna"  || currentArg == "--signal-name") {
-			setSignalName(i+1 < argc ? argv[i+1] : nullptr);
-			++i;
-		}
-		else if(currentArg == "-snu"  || currentArg == "--signal-number") {
-			setSignalNumber(i+1 < argc ? argv[i+1] : nullptr);
+		else if(currentArg == "-C"  || currentArg == "--signal") {
+			setSignal(i+1 < argc ? argv[i+1] : nullptr);
 			++i;
 		}
 		else if(currentArg == "-S"  || currentArg == "--state") {
@@ -179,7 +169,6 @@ Options::Options(int argc, const char* argv[]) {
 
 	switch(getCommand()) {
 	case Command::waitTask:
-	case Command::cancelTask:
 	case Command::signalTask:
 	case Command::showTask:
 		if(getTaskId().empty()) {
@@ -191,8 +180,8 @@ Options::Options(int argc, const char* argv[]) {
 	}
 
 	if(getCommand() == Command::signalTask) {
-		if(getSignalNumber() < 0 && getSignalName().empty()) {
-			throw ArgumentsException("Option \"--signal-name\" or \"--signal-number\" is missing.");
+		if(getSignal().empty()) {
+			throw ArgumentsException("Option \"--signal\" is missing.");
 		}
 	}
 }
@@ -210,11 +199,8 @@ void Options::setCommand(const std::string& commandStr) {
 		if(!getTaskId().empty()) {
 			throw ArgumentsException("Specification of command \"" + commandStr + "\" is not allowed together with option '--task-id'.");
 		}
-		if(!getSignalName().empty()) {
-			throw ArgumentsException("Specification of command \"" + commandStr + "\" is not allowed together with option '--signal-name'.");
-		}
-		if(getSignalNumber() >= 0) {
-			throw ArgumentsException("Specification of command \"" + commandStr + "\" is not allowed together with option '--signal-number'.");
+		if(!getSignal().empty()) {
+			throw ArgumentsException("Specification of command \"" + commandStr + "\" is not allowed together with option '--signal'.");
 		}
 		if(state) {
 			throw ArgumentsException("Specification of command \"" + commandStr + "\" is not allowed together with option '--state'.");
@@ -227,13 +213,9 @@ void Options::setCommand(const std::string& commandStr) {
 		}
 		break;
 	case Command::waitTask:
-	case Command::cancelTask:
 	case Command::showTask:
-		if(!getSignalName().empty()) {
-			throw ArgumentsException("Specification of command \"" + commandStr + "\" is not allowed together with option '--signal-name'.");
-		}
-		if(getSignalNumber() >= 0) {
-			throw ArgumentsException("Specification of command \"" + commandStr + "\" is not allowed together with option '--signal-number'.");
+		if(!getSignal().empty()) {
+			throw ArgumentsException("Specification of command \"" + commandStr + "\" is not allowed together with option '--signal'.");
 		}
 		// @suppress("No break at end of case")
 	case Command::signalTask:
@@ -266,11 +248,8 @@ void Options::setCommand(const std::string& commandStr) {
 		if(!getTaskId().empty()) {
 			throw ArgumentsException("Specification of command \"" + commandStr + "\" is not allowed together with option '--task-id'.");
 		}
-		if(!getSignalName().empty()) {
-			throw ArgumentsException("Specification of command \"" + commandStr + "\" is not allowed together with option '--signal-name'.");
-		}
-		if(getSignalNumber() >= 0) {
-			throw ArgumentsException("Specification of command \"" + commandStr + "\" is not allowed together with option '--signal-number'.");
+		if(!getSignal().empty()) {
+			throw ArgumentsException("Specification of command \"" + commandStr + "\" is not allowed together with option '--signal'.");
 		}
 		if(!getEventType().empty()) {
 			throw ArgumentsException("Specification of command \"" + commandStr + "\" is not allowed together with option '--event-type'.");
@@ -407,7 +386,7 @@ void Options::setTaskId(const char* value) {
 
 	taskId = value;
 
-	if(!command && *command != Command::waitTask && *command != Command::cancelTask && *command != Command::signalTask && *command != Command::showTask) {
+	if(!command && *command != Command::waitTask && *command != Command::signalTask && *command != Command::showTask) {
 		throw ArgumentsException("Command \"" + commandToStr(*command) + "\" does not allow to use option \"--task-id\".");
 	}
 }
@@ -416,59 +395,23 @@ const std::string& Options::getTaskId() const noexcept {
 	return taskId;
 }
 
-void Options::setSignalName(const char* value) {
-	if(!signalName.empty()) {
-		throw ArgumentsException("Multiple specification of option \"--signal-name\" is not allowed.");
-	}
-	if(signalNumber >= 0) {
-		throw ArgumentsException("Specification of option \"--signal-name\" is not allowed together with option \"--signal-number\".");
+void Options::setSignal(const char* value) {
+	if(!signal.empty()) {
+		throw ArgumentsException("Multiple specification of option \"--signal\" is not allowed.");
 	}
 	if(!value) {
-		throw ArgumentsException("Value missing of option \"--signal-name\".");
+		throw ArgumentsException("Value missing of option \"--signal\".");
 	}
 
-	signalName = value;
+	signal = value;
 
 	if(!command && *command != Command::signalTask) {
 		throw ArgumentsException("Command \"" + commandToStr(*command) + "\" does not allow to use option \"--signal-name\".");
 	}
 }
 
-const std::string& Options::getSignalName() const noexcept {
-	return signalName;
-}
-
-void Options::setSignalNumber(const char* value) {
-	if(signalNumber >= 0) {
-		throw ArgumentsException("Multiple specification of option \"--signal-number\" is not allowed.");
-	}
-	if(!signalName.empty()) {
-		throw ArgumentsException("Specification of option \"--signal-number\" is not allowed together with option \"--signal-name\".");
-	}
-	if(!value) {
-		throw ArgumentsException("Value missing of option \"--signal-number\".");
-	}
-
-	try {
-		signalNumber = std::stoi(value);
-	}
-	catch(const std::invalid_argument& e) {
-		throw ArgumentsException("Invalid value '" + std::string(value) + "' of option \"--signal-number\".");
-	}
-	catch(const std::out_of_range& e) {
-		throw ArgumentsException("Value '" + std::string(value) + "' of option \"--signal-number\" is out of range. The value should be between 1-31 and between 34-64.");
-	}
-	if(signalNumber < 1 || (signalNumber >= 32 && signalNumber <= 33) || signalNumber > 64) {
-		throw ArgumentsException("Value '" + std::string(value) + "' of option \"--signal-number\" is out of range. The value should be between 1-31 and between 34-64.");
-	}
-
-	if(!command && *command != Command::signalTask) {
-		throw ArgumentsException("Command \"" + commandToStr(*command) + "\" does not allow to use option \"--signal-number\".");
-	}
-}
-
-int Options::getSignalNumber() const noexcept {
-	return signalNumber;
+const std::string& Options::getSignal() const noexcept {
+	return signal;
 }
 
 void Options::setState(const char* value) {
@@ -601,7 +544,10 @@ void Options::printUsage() {
 	std::cout << "  -t, --task-id          <task-id>        Specifies the task that the command is related to.\n";
 	std::cout << "\n";
 	std::cout << "OPTIONS specific for command 'signal-task':\n";
-	std::cout << "  -sna, --signal-name    <signal-name>    Specifies the signal that will be sent to the task. Available values are\n";
+	std::cout << "  -C, --signal <signal>                   Specifies the signal that will be sent to the task. Signal \"CANCEL\" has a special meaning\n";
+	std::cout << "                                          to cancel a task. If task is still waiting, it is removed from to wait for running.\n";
+	std::cout << "                                          If it is already running, it will result to send a special signal equal to Strg+C.\n";
+	std::cout << "                                          Other available values are numbers between 1-31 and between 34-64 of following constants:\n";
 	std::cout << "                                          SIGHUP, SIGINT, SIGQUIT, SIGILL, SIGTRAP, SIGABRT, SIGBUS, SIGFPE, SIGKILL, SIGUSR1,\n";
 	std::cout << "                                          SIGSEGV, SIGUSR2, SIGPIPE, SIGALRM, SIGTERM, SIGSTKFLT, SIGCHLD, SIGCONT, SIGSTOP,\n";
 	std::cout << "                                          SIGTSTP, SIGTTIN, SIGTTOU, SIGURG, SIGXCPU, SIGXFSZ, SIGVTALRM, SIGPROF, SIGWINCH,\n";
@@ -610,8 +556,6 @@ void Options::printUsage() {
 	std::cout << "                                          SIGRTMIN+12, SIGRTMIN+13, SIGRTMIN+14, SIGRTMIN+15, SIGRTMAX-14, SIGRTMAX-13,\n";
 	std::cout << "                                          SIGRTMAX-12, SIGRTMAX-11, SIGRTMAX-10, SIGRTMAX-9, SIGRTMAX-8, SIGRTMAX-7 SIGRTMAX-6,\n";
 	std::cout << "                                          SIGRTMAX-5, SIGRTMAX-4, SIGRTMAX-3, SIGRTMAX-2, SIGRTMAX-1, SIGRTMAX\n";
-	std::cout << "  -snu, --signal-number  <signal-number>  Specifies the signal that will be sent to the task\n";
-    std::cout << "                                          Available values are between 1-31 and between 34-64\n";
 	std::cout << "\n";
 	std::cout << "OPTIONS specific for command 'show-tasks':\n";
 	std::cout << "  -S, --state            <state>          Specifies a filter to select events that that matches to the specified state.\n";

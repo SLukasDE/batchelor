@@ -8,7 +8,6 @@ enum class Command {
 	help,
 	sendEvent,
 	waitTask,
-	cancelTask,
 	signalTask,
 	showTask,
 	showTasks

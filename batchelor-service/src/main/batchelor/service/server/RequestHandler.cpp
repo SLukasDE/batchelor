@@ -3,6 +3,7 @@
 
 #include <esl/com/http/server/exception/StatusCode.h>
 #include <esl/io/input/String.h>
+#include <esl/io/output/Memory.h>
 #include <esl/io/output/String.h>
 #include <esl/utility/MIME.h>
 #include <esl/utility/String.h>
@@ -13,7 +14,6 @@
 #include "sergut/XmlSerializer.h"
 
 #include <map>
-#include <memory>
 #include <string>
 #include <vector>
 
@@ -22,6 +22,8 @@ namespace service {
 namespace server {
 namespace {
 Logger logger("batchelor::service::server::RequestHandler");
+
+const std::string emptyResponse = "{}";
 
 std::vector<std::string> exctractAccepts(const std::map<std::string, std::string>& headers) {
 	std::vector<std::string> accepts;
@@ -79,39 +81,8 @@ public:
 		(this->*processHandler)();
 	}
 
-	// GET: "/jobs[?state={state}]"
-	void process_1() {
-		std::string state;
-		if(requestContext.getRequest().hasArgument("state")) {
-			state = requestContext.getRequest().getArgument("state");
-		}
-
-		std::vector<schemas::JobStatusHead> jobIds = service->getJobs(state);
-
-		std::string responseContent;
-		esl::utility::MIME responseMIME = getResponseMIME();
-
-		if(responseMIME == esl::utility::MIME::Type::applicationXml) {
-			sergut::XmlSerializer ser;
-			ser.serializeNestedData("jobs", "job", sergut::XmlValueType::Child, jobIds);
-		    responseContent = ser.str();
-		}
-		else if(responseMIME == esl::utility::MIME::Type::applicationJson) {
-			sergut::JsonSerializer ser;
-			ser.serializeData(jobIds);
-		    responseContent = ser.str();
-		}
-		else {
-			throw esl::com::http::server::exception::StatusCode(415, "accept header requires \"application/xml\" or \"application/json\"");
-		}
-
-		esl::com::http::server::Response response(200, responseMIME);
-		esl::io::Output output = esl::io::output::String::create(std::move(responseContent));
-		requestContext.getConnection().send(response, std::move(output));
-	}
-
 	// POST: "/fetchJob"
-	void process_2() {
+	void process_1() {
 		schemas::FetchRequest fetchRequest = sergut::JsonDeserializer(getString()).deserializeData<schemas::FetchRequest>();
 		schemas::FetchResponse fetchResponse = service->fetchJob(fetchRequest);
 
@@ -138,13 +109,50 @@ public:
 		requestContext.getConnection().send(response, std::move(output));
 	}
 
-	// POST: "/job-status"
-	void process_3() {
+	// GET: "/jobs[?[state={state}][&][nafter={eventNotAfter}][&][nbefore={eventNotBefore}]]"
+	void process_2() {
+		std::string state;
+		if(requestContext.getRequest().hasArgument("state")) {
+			state = requestContext.getRequest().getArgument("state");
+		}
+
+		std::string eventNotAfter;
+		if(requestContext.getRequest().hasArgument("nafter")) {
+			eventNotAfter = requestContext.getRequest().getArgument("nafter");
+		}
+
+		std::string eventNotBefore;
+		if(requestContext.getRequest().hasArgument("nbefore")) {
+			eventNotBefore = requestContext.getRequest().getArgument("nbefore");
+		}
+
+		std::vector<schemas::JobStatusHead> jobIds = service->getJobs(state, eventNotAfter, eventNotBefore);
+
+		std::string responseContent;
+		esl::utility::MIME responseMIME = getResponseMIME();
+
+		if(responseMIME == esl::utility::MIME::Type::applicationXml) {
+			sergut::XmlSerializer ser;
+			ser.serializeNestedData("jobs", "job", sergut::XmlValueType::Child, jobIds);
+		    responseContent = ser.str();
+		}
+		else if(responseMIME == esl::utility::MIME::Type::applicationJson) {
+			sergut::JsonSerializer ser;
+			ser.serializeData(jobIds);
+		    responseContent = ser.str();
+		}
+		else {
+			throw esl::com::http::server::exception::StatusCode(415, "accept header requires \"application/xml\" or \"application/json\"");
+		}
+
+		esl::com::http::server::Response response(200, responseMIME);
+		esl::io::Output output = esl::io::output::String::create(std::move(responseContent));
+		requestContext.getConnection().send(response, std::move(output));
 	}
 
 	// GET: "/job/{jobId}"
-	void process_4() {
-		std::string jobId = pathList[1];
+	void process_3() {
+		const std::string& jobId = pathList[1];
 		std::unique_ptr<schemas::JobStatusHead> status = service->getJob(jobId);
 
 		if(!status) {
@@ -173,14 +181,10 @@ public:
 		requestContext.getConnection().send(response, std::move(output));
 	}
 
-	// POST: "/signal"
-	void process_5() {
-	}
-
-	// POST: "/runBatch"
-	void process_6() {
+	// POST: "/job"
+	void process_4() {
 		schemas::RunRequest runRequest = sergut::JsonDeserializer(getString()).deserializeData<schemas::RunRequest>();
-		schemas::RunResponse runResponse = service->runBatch(runRequest);
+		schemas::RunResponse runResponse = service->runJob(runRequest);
 
 		std::string responseContent;
 		esl::utility::MIME responseMIME = getResponseMIME();
@@ -202,6 +206,19 @@ public:
 
 		esl::com::http::server::Response response(200, responseMIME);
 		esl::io::Output output = esl::io::output::String::create(std::move(responseContent));
+		requestContext.getConnection().send(response, std::move(output));
+	}
+
+	// POST: "/signal/{jobId}/{signal}"
+	void process_5() {
+		const std::string& jobId = pathList[1];
+		const std::string& signal = pathList[2];
+		service->sendSignal(jobId, signal);
+
+		//throw esl::com::http::server::exception::StatusCode(200, "{}");
+		esl::utility::MIME responseMIME = esl::utility::MIME::Type::applicationJson;
+		esl::com::http::server::Response response(200, responseMIME);
+		esl::io::Output output = esl::io::output::Memory::create(emptyResponse.data(), emptyResponse.size());
 		requestContext.getConnection().send(response, std::move(output));
 	}
 
@@ -250,35 +267,30 @@ esl::io::Input RequestHandler::accept(esl::com::http::server::RequestContext& re
 
 	esl::object::Context& objectContext = requestContext.getObjectContext();
 
-	// GET: "/jobs[?state={state}]"
-	if(pathList.size() == 1 && pathList[0] == "jobs"
-	&& requestContext.getRequest().getMethod() == esl::utility::HttpMethod::toString(esl::utility::HttpMethod::Type::httpGet)) {
+	// POST: "/fetchJob"
+	if(pathList.size() == 1 && pathList[0] == "fetchJob"
+	&& requestContext.getRequest().getMethod() == esl::utility::HttpMethod::toString(esl::utility::HttpMethod::Type::httpPost)) {
 		writer.reset(new InputHandler(requestContext, &InputHandler::process_1, makeService(objectContext), std::move(pathList)));
 	}
-	// POST: "/fetchJob"
-	else if(pathList.size() == 1 && pathList[0] == "fetchJob"
-	&& requestContext.getRequest().getMethod() == esl::utility::HttpMethod::toString(esl::utility::HttpMethod::Type::httpPost)) {
-		writer.reset(new InputHandler(requestContext, &InputHandler::process_2, makeService(objectContext), std::move(pathList)));
-	}
-	// POST: "/job-status"
-	else if(pathList.size() == 1 && pathList[0] == "job-status"
+	// GET: "/jobs[?state={state}]"
+	else if(pathList.size() == 1 && pathList[0] == "jobs"
 	&& requestContext.getRequest().getMethod() == esl::utility::HttpMethod::toString(esl::utility::HttpMethod::Type::httpGet)) {
-		writer.reset(new InputHandler(requestContext, &InputHandler::process_3, makeService(objectContext), std::move(pathList)));
+		writer.reset(new InputHandler(requestContext, &InputHandler::process_2, makeService(objectContext), std::move(pathList)));
 	}
 	// GET: "/job/{jobId}"
 	else if(pathList.size() == 2 && pathList[0] == "job"
 	&& requestContext.getRequest().getMethod() == esl::utility::HttpMethod::toString(esl::utility::HttpMethod::Type::httpGet)) {
+		writer.reset(new InputHandler(requestContext, &InputHandler::process_3, makeService(objectContext), std::move(pathList)));
+	}
+	// POST: "/job"
+	else if(pathList.size() == 1 && pathList[0] == "job"
+	&& requestContext.getRequest().getMethod() == esl::utility::HttpMethod::toString(esl::utility::HttpMethod::Type::httpPost)) {
 		writer.reset(new InputHandler(requestContext, &InputHandler::process_4, makeService(objectContext), std::move(pathList)));
 	}
-	// POST: "/signal"
-	else if(pathList.size() == 1 && pathList[0] == "signal"
-	&& requestContext.getRequest().getMethod() == esl::utility::HttpMethod::toString(esl::utility::HttpMethod::Type::httpPost)) {
+	// POST: "/signal/{jobId}/{signal}"
+	else if(pathList.size() == 3 && pathList[0] == "signal"
+	&& requestContext.getRequest().getMethod() == esl::utility::HttpMethod::toString(esl::utility::HttpMethod::Type::httpPut)) {
 		writer.reset(new InputHandler(requestContext, &InputHandler::process_5, makeService(objectContext), std::move(pathList)));
-	}
-	// POST: "/runBatch"
-	else if(pathList.size() == 1 && pathList[0] == "runBatch"
-	&& requestContext.getRequest().getMethod() == esl::utility::HttpMethod::toString(esl::utility::HttpMethod::Type::httpPost)) {
-		writer.reset(new InputHandler(requestContext, &InputHandler::process_6, makeService(objectContext), std::move(pathList)));
 	}
 
 	if(writer == nullptr) {

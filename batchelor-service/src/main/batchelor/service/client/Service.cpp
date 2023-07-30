@@ -1,5 +1,6 @@
 #include <batchelor/service/client/Service.h>
 #include <batchelor/service/Logger.h>
+#include <batchelor/service/schemas/Signal.h>
 
 #include <esl/com/http/client/Request.h>
 #include <esl/com/http/client/Response.h>
@@ -74,12 +75,27 @@ schemas::FetchResponse Service::fetchJob(const schemas::FetchRequest& fetchReque
     return fetchResponse;
 }
 
-std::vector<schemas::JobStatusHead> Service::getJobs(const std::string& state) {
+std::vector<schemas::JobStatusHead> Service::getJobs(const std::string& state, const std::string& eventNotAfter, const std::string& eventNotBefore) {
 	std::vector<schemas::JobStatusHead> jobs;
 
 	std::string serviceUrl = "jobs";
-	if(!state.empty()) {
-		serviceUrl += "?state=" + state;
+	{
+		std::string args;
+
+		if(!state.empty()) {
+			args += args.empty() ? "?" : "&";
+			args += "state=" + state;
+		}
+		if(!eventNotAfter.empty()) {
+			args += args.empty() ? "?" : "&";
+			args += "nafter=" + eventNotAfter;
+		}
+		if(eventNotBefore.empty()) {
+			args += args.empty() ? "?" : "&";
+			args += "nbefore=" + eventNotBefore;
+		}
+
+		serviceUrl += args;
 	}
 
     esl::com::http::client::Request request(serviceUrl, esl::utility::HttpMethod::Type::httpGet, esl::utility::MIME::Type::applicationJson);
@@ -157,32 +173,10 @@ std::unique_ptr<schemas::JobStatusHead> Service::getJob(const std::string& jobId
     return status;
 }
 
-void Service::sendSignal(const schemas::Signal& signal) {
-    static const std::string serviceUrl = "signal";
-
-    std::map<std::string, std::string> requestHeaders;
-    requestHeaders["Accept"] =
-    		esl::utility::MIME::toString(esl::utility::MIME::Type::applicationJson) + "," +
-			esl::utility::MIME::toString(esl::utility::MIME::Type::applicationXml);
-
-    sergut::JsonSerializer serializer;
-    serializer.serializeData(signal);
-    esl::io::Output output(esl::io::output::String::create(serializer.str()));
-
-    esl::com::http::client::Request request(serviceUrl, esl::utility::HttpMethod::Type::httpPost, esl::utility::MIME::Type::applicationJson, std::move(requestHeaders));
-
-	esl::com::http::client::Response response = connection.send(std::move(request), std::move(output), esl::io::Input());
-
-    if(response.getStatusCode() < 200 || response.getStatusCode() > 299) {
-        std::string message = "Received wrong status code  \"" + std::to_string(response.getStatusCode()) + "\" from service \"" + serviceUrl + "\"";
-		throw esl::system::Stacktrace::add(std::runtime_error(message));
-    }
-}
-
-schemas::RunResponse Service::runBatch(const schemas::RunRequest& runRequest) {
+schemas::RunResponse Service::runJob(const schemas::RunRequest& runRequest) {
 	schemas::RunResponse runResponse;
 
-	static const std::string serviceUrl = "runBatch";
+	static const std::string serviceUrl = "job";
 
 #if 0
     std::map<std::string, std::string> requestHeaders;
@@ -229,6 +223,19 @@ schemas::RunResponse Service::runBatch(const schemas::RunRequest& runRequest) {
     }
 
     return runResponse;
+}
+
+void Service::sendSignal(const std::string& jobId, const std::string& signal) {
+    static const std::string serviceUrl = "signal/" + jobId + "/" + signal;
+
+    esl::com::http::client::Request request(serviceUrl, esl::utility::HttpMethod::Type::httpPost, esl::utility::MIME::Type::applicationJson);
+
+	esl::com::http::client::Response response = connection.send(std::move(request), esl::io::Output(), esl::io::Input());
+
+    if(response.getStatusCode() < 200 || response.getStatusCode() > 299) {
+        std::string message = "Received wrong status code  \"" + std::to_string(response.getStatusCode()) + "\" from service \"" + serviceUrl + "\"";
+		throw esl::system::Stacktrace::add(std::runtime_error(message));
+    }
 }
 
 } /* namespace client */

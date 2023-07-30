@@ -10,6 +10,7 @@
 #include <esl/object/Context.h>
 
 #include <functional>
+#include <memory>
 
 namespace batchelor {
 namespace service {

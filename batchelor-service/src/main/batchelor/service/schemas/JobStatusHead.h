@@ -14,27 +14,31 @@ namespace service {
 namespace schemas {
 
 struct JobStatusHead {
-	std::string jobId;
-
-	/* Id might contain following keys:
-	 * - cloudId: is is 'on-premise/REWE' or 'GCP'
-	 * - hostId: identifies the host the worker is running, e.g. hostname
-	 * - workerId: identifies the worker, e.g. the ID of the container if multiple worker-containers are running on the same host
-	 */
-	// TODO: ... see fetch request
-	std::vector<Setting> ids;
-
 	RunConfiguration runConfiguration;
 
+	/* Metrics contains all metric variables and their values as used for the condition at the time the job has been assigned to a worker and state changed to running.
+	 * Available variables to get used in the formula are all variables delivered as metrics of "fetch-request" like
+	 * - cpu usage              (CPU_USAGE),
+	 * - memory usage           (MEM_USAGE),
+	 * - number of jobs running (RUNNING_JOBS),
+	 * - host name              (HOST_NAME),
+	 * - cloudId,
+	 * - workerId
+	 * - ...
+	 * as well as job specific variables provided by the head server, like
+	 * - waiting time,
+	 * - priority,
+	 * - ...
+	 */
+	std::vector<Setting> metrics;
+
 	/* possible values:
-	 *   - waiting   // set by head   // new job has been created and is waiting to get into state running
-	 *   - timeout   // set by head   // job was in state waiting but timeout occurred to change state (to running)
-	 *   - running   // set by head   // job was in state waiting and has been fetched to run
-	 *   - done      // set by worker // job was in state running but it has returned with a return-code
-	 *   - failed    // set by worker // job was in state running but it has returned with an exception
-	 * //- signaling // set by head   // job was in state running but a signal (e.g. SIGINT or SIGTERM) has been send to process
-	 * //- signaled  // set by head   // job was in state signaling or waiting and job has been returned (with return-code or exception)
-	 *   - zombi     // set by head   // job was in state running but worker did not send heart beat for a while
+	 * - waiting   // set by head   // new job has been created and is waiting to get into state running
+	 * - timeout   // set by head   // job was in state waiting but timeout occurred to change state (to running)
+	 * - running   // set by head   // job was in state waiting and has been fetched to run
+	 * - done      // set by worker // job was in state running but it has returned with a return-code
+	 * - failed    // set by worker // job was in state running but it has returned with an exception
+	 * - zombi     // set by head   // job was in state running but worker did not send heart beat for a while
 	 */
 	std::string state;
 
@@ -48,9 +52,8 @@ struct JobStatusHead {
 };
 
 SERGUT_FUNCTION(JobStatusHead, data, ar) {
-    ar & SERGUT_MMEMBER(data, jobId)
-       & SERGUT_NESTED_MMEMBER(data, ids, id)
-       & SERGUT_MMEMBER(data, runConfiguration)
+    ar & SERGUT_MMEMBER(data, runConfiguration)
+       & SERGUT_NESTED_MMEMBER(data, metrics, metric)
        & SERGUT_MMEMBER(data, state)
        & SERGUT_MMEMBER(data, returnCode)
        & SERGUT_MMEMBER(data, message)

@@ -1,5 +1,7 @@
-#include <batchelor/control/cli/Logger.h>
-#include <batchelor/control/cli/Main.h>
+#include <batchelor/control/ArgumentsException.h>
+#include <batchelor/control/Logger.h>
+#include <batchelor/control/Main.h>
+#include <batchelor/control/Options.h>
 
 #include <esl/logging/Logging.h>
 #include <esl/plugin/Registry.h>
@@ -11,20 +13,31 @@
 #include <iostream>
 #include <stdexcept>
 
-batchelor::control::cli::Logger logger("batchelor::control::cli");
+batchelor::control::Logger logger("batchelor::control");
+
+
+
 
 int main(int argc, const char* argv[]) {
+	using namespace batchelor::control;
+
 	int rc = -1;
 
 	try {
+		Options options(argc, argv);
+
 		eslx::Plugin::install(esl::plugin::Registry::get(), nullptr);
 	    esl::system::Stacktrace::init("eslx/system/Stacktrace", {});
 		esl::logging::Logging::initWithFile("logger.xml");
 
-		batchelor::control::cli::Main(argc, argv);
+		Main { options };
 
 		rc = 0;
 	}
+    catch(const ArgumentsException& e) {
+    	std::cerr << e.what() << "\n";
+		Options::printUsage();
+    }
     catch(const esl::plugin::exception::PluginNotFound& e) {
         std::cerr << "Plugin not found exception occurred: " << e.what() << "\n";
         const esl::plugin::Registry::BasePlugins& basePlugins = esl::plugin::Registry::get().getPlugins(e.getTypeIndex());

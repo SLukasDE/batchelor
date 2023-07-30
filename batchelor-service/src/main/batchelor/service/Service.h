@@ -7,7 +7,6 @@
 #include <batchelor/service/schemas/JobStatusWorker.h>
 #include <batchelor/service/schemas/RunRequest.h>
 #include <batchelor/service/schemas/RunResponse.h>
-#include <batchelor/service/schemas/Signal.h>
 
 #include <memory>
 #include <string>
@@ -20,25 +19,45 @@ class Service {
 public:
 	virtual ~Service() = default;
 
-	// used by worker
+	/* This is a complex call used by workers.
+	 * Workers are sending by FetchRequest
+	 * - the state of their current running jobs.
+	 * - available jobs to execute
+	 * - ...
+	 * Workers will receive by FetchResponse
+	 * - what they have to execute
+	 * - what signal has to send to a specific job
+	 * - ...
+	 */
 	virtual schemas::FetchResponse fetchJob(const schemas::FetchRequest& fetchRequest) = 0;
 
 	/* possible state values:
-	 *   - waiting   // set by head   // new job has been created and is waiting to get into state running
-	 *   - timeout   // set by head   // job was in state waiting but timeout occurred to change state (to running)
-	 *   - running   // set by head   // job was in state waiting and has been fetched to run
-	 *   - done      // set by worker // job was in state running but it has returned with a return-code
-	 *   - failed    // set by worker // job was in state running but it has returned with an exception
-	 * //- signaling // set by head   // job was in state running but a signal (e.g. SIGINT or SIGTERM) has been send to process
-	 * //- signaled  // set by head   // job was in state signaling or waiting and job has been returned (with return-code or exception)
-	 *   - zombi     // set by head   // job was in state running but worker did not send heart beat for a while
+	 * - waiting   // set by head   // new job has been created and is waiting to get into state running
+	 * - timeout   // set by head   // job was in state waiting but timeout occurred to change state (to running)
+	 * - running   // set by head   // job was in state waiting and has been fetched to run
+	 * - done      // set by worker // job was in state running but it has returned with a return-code
+	 * - failed    // set by worker // job was in state running but it has returned with an exception
+	 * - zombi     // set by head   // job was in state running but worker did not send heart beat for a while
 	 */
-	virtual std::vector<schemas::JobStatusHead> getJobs(const std::string& state) = 0;
+	/* This call is used by a controller-cli or a web frontend to get a list of all jobs
+	 * - that are waiting,
+	 * - could not switch to running because of a timeout,
+	 * - that are running, done or failed
+	 * - died as zombie because worker died.
+	 * Each entry contains the job id, arguments/settings, state, return-code or error-message, start time, stop time, ...
+	 */
+	virtual std::vector<schemas::JobStatusHead> getJobs(const std::string& state, const std::string& eventNotAfter, const std::string& eventNotBefore) = 0;
 
-	// used by cli
+	/* This call is used by a controller-cli or a web frontend to get data of a specific job.
+	 * It is almost the same service as above, but now for a specific jobId.
+	 */
 	virtual std::unique_ptr<schemas::JobStatusHead> getJob(const std::string& jobId) = 0;
-	virtual void sendSignal(const schemas::Signal& signal) = 0;
-	virtual schemas::RunResponse runBatch(const schemas::RunRequest& runRequest) = 0;
+
+	/* This call is used by a controller-cli or a web frontend */
+	virtual schemas::RunResponse runJob(const schemas::RunRequest& runRequest) = 0;
+
+	/* This call is used by a controller-cli or a web frontend to send a specific signal to a task or to cancel the task */
+	virtual void sendSignal(const std::string& jobId, const std::string& signal) = 0;
 };
 
 } /* namespace service */

@@ -26,12 +26,18 @@ public:
 
 	// used by worker
 	schemas::FetchResponse fetchJob(const schemas::FetchRequest& fetchRequest) override;
-	std::vector<schemas::JobStatusHead> getJobs(const std::string& state) override;
 
-	// used by cli
+	// used by controller-cli
+	std::vector<schemas::JobStatusHead> getJobs(const std::string& state, const std::string& eventNotAfter, const std::string& eventNotBefore) override;
+
+	// used by controller-cli
 	std::unique_ptr<schemas::JobStatusHead> getJob(const std::string& jobId) override;
-	void sendSignal(const schemas::Signal& signal) override;
-	schemas::RunResponse runBatch(const schemas::RunRequest& runRequest) override;
+
+	// used by controller-cli
+	schemas::RunResponse runJob(const schemas::RunRequest& runRequest) override;
+
+	// used by controller-cli
+	void sendSignal(const std::string& jobId, const std::string& signal) override;
 
 private:
     const esl::com::http::client::Connection& connection;

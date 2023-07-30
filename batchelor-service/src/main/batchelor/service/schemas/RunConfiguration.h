@@ -14,13 +14,23 @@ namespace schemas {
 
 struct RunConfiguration {
 	std::string jobId;
-	std::string batchId;
+	std::string eventType;
+
+	/* contains event type specific settings, like
+	 * - arguments,
+	 * - environment variables,
+	 * - working dir, ...
+	 * e.g.:
+	 * - settings[0] = { 'env' ; 'DISPLAY=0' }
+	 * - settings[1] = { 'env' ; 'TMP_DIR=/tmp' }
+	 * - settings[2] = { 'args' ; '--propertyId=Bla --propertyFile=/wxx/secret/property.cfg' }
+	 */
 	std::vector<Setting> settings;
 };
 
 SERGUT_FUNCTION(RunConfiguration, data, ar) {
     ar & SERGUT_MMEMBER(data, jobId)
-       & SERGUT_MMEMBER(data, batchId)
+       & SERGUT_MMEMBER(data, eventType)
        & SERGUT_NESTED_MMEMBER(data, settings, settings);
 }
 

@@ -4,7 +4,9 @@
 
 #include <batchelor/common/types/State.h>
 
+#include <esl/com/http/server/exception/StatusCode.h>
 #include <esl/system/Stacktrace.h>
+#include <esl/utility/MIME.h>
 
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_generators.hpp>
@@ -16,7 +18,6 @@
 #include <stdexcept>
 #include <time.h>
 
-#include <iostream>
 namespace batchelor {
 namespace head {
 namespace {
@@ -141,17 +142,14 @@ service::schemas::RunResponse Service::runTask(const service::schemas::RunReques
 
 	std::unique_ptr<Dao::Task> existingTask = getDao().loadLatesQueuedOrRunningTaskByCrc32(runRequest.eventType, crc32);
 	if(existingTask && (existingTask->state == common::types::State::queued || existingTask->state == common::types::State::running)) {
-std::cerr << "existing\n";
 		existingTask->priority = runRequest.priority;
 		existingTask->settings = runRequest.settings;
 		existingTask->condition = runRequest.condition;
-std::cerr << getJSONTimestamp(existingTask->createdTS) << "\n";
 		getDao().updateTask(*existingTask);
 
 		rv = makeRunResponse(*existingTask);
 	}
 	else {
-std::cerr << "not existing\n";
 		//boost::uuids::uuid taskIdUUID; // initialize uuid
 		static boost::uuids::random_generator rg;
 		boost::uuids::uuid taskIdUUID = rg();
@@ -181,6 +179,13 @@ std::cerr << "not existing\n";
 }
 
 void Service::sendSignal(const std::string& taskId, const std::string& signal) {
+	std::unique_ptr<Dao::Task> task = getDao().loadTaskByTaskId(taskId);
+	if(!task) {
+		throw esl::com::http::server::exception::StatusCode(404, esl::utility::MIME::Type::applicationJson, "{}");
+	}
+
+	task->signals.push_back(signal);
+	getDao().updateTask(*task);
 }
 
 esl::database::Connection& Service::getDBConnection() const {

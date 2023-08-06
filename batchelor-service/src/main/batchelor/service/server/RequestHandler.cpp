@@ -300,7 +300,7 @@ esl::io::Input RequestHandler::accept(esl::com::http::server::RequestContext& re
 	}
 	// POST: "/signal/{taskId}/{signal}"
 	else if(pathList.size() == 3 && pathList[0] == "signal"
-	&& requestContext.getRequest().getMethod() == esl::utility::HttpMethod::toString(esl::utility::HttpMethod::Type::httpPut)) {
+	&& requestContext.getRequest().getMethod() == esl::utility::HttpMethod::toString(esl::utility::HttpMethod::Type::httpPost)) {
 		writer.reset(new InputHandler(requestContext, &InputHandler::process_5, makeService(objectContext), std::move(pathList)));
 	}
 

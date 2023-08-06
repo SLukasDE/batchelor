@@ -19,18 +19,21 @@ public:
 	Main(const Options& options);
 
 	void sendEvent();
-	void waitTask();
+	void waitTask(const std::string& taskId);
 	void signalTask();
 	void showTask();
 	void showTasks();
 
+	int getReturnCode() const;
+
+private:
 	std::unique_ptr<esl::com::http::client::Connection> createConnection();
 	esl::com::http::client::ConnectionFactory& getConnectionFactory();
 
-private:
 	const Options& options;
 	std::string url;
 	std::unique_ptr<esl::com::http::client::ConnectionFactory> httpConnectionFactory;
+	int rc = 0;
 };
 
 } /* namespace control */

@@ -518,7 +518,7 @@ void Options::printUsage() {
 	std::cout << "  batchelor send-event   [CONNECTION OPTIONS] --event-type <event-type> [--priority <priority>] [--setting <key> <value>] [--condition <condition>] [--wait]\n";
 	std::cout << "  batchelor wait-task    [CONNECTION OPTIONS] --task-id <task-id>\n";
 	std::cout << "  batchelor cancel-task  [CONNECTION OPTIONS] --task-id <task-id>\n";
-	std::cout << "  batchelor signal-task  [CONNECTION OPTIONS] --task-id <task-id> [--signal-name <signal-name> | --signal-no <signal number>]\n";
+	std::cout << "  batchelor signal-task  [CONNECTION OPTIONS] --task-id <task-id> --signal <signal>\n";
 	std::cout << "  batchelor show-task    [CONNECTION OPTIONS] --task-id <task-id>\n";
 	std::cout << "  batchelor show-tasks   [CONNECTION OPTIONS] [--state <state>] [--event-not-after <timestamp>] [--event-not-before <timestamp>]\n";
 	std::cout << "\n";
@@ -526,7 +526,6 @@ void Options::printUsage() {
 	std::cout << "  help         shows this help\n";
 	std::cout << "  send-event   adds a new event that will wait to get processed.\n";
 	std::cout << "  wait-task    Wait for new messages of the given task and return with exit code of this task.\n";
-	std::cout << "  cancel-task  Send cancel message to the given task.\n";
 	std::cout << "  signal-task  Send a signal to the given task. It must be exactly one signal specified as name or number.\n";
 	std::cout << "  show-task    Shows all details of the given task.\n";
 	std::cout << "  show-tasks   Shows a list with some attributes of tasks that matches the given criteria.\n";

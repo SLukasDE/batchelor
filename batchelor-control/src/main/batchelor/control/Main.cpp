@@ -1,6 +1,8 @@
 #include <batchelor/control/Main.h>
 #include <batchelor/control/Logger.h>
 
+#include <batchelor/common/types/State.h>
+
 #include <batchelor/service/client/Service.h>
 #include <batchelor/service/schemas/RunRequest.h>
 #include <batchelor/service/schemas/RunResponse.h>
@@ -27,7 +29,7 @@ Main::Main(const Options& aOptions)
 		sendEvent();
 		break;
 	case Command::waitTask:
-		waitTask();
+		waitTask(options.getTaskId());
 		break;
 	case Command::signalTask:
 		signalTask();
@@ -42,28 +44,108 @@ Main::Main(const Options& aOptions)
 }
 
 void Main::sendEvent() {
-	auto httpConnection = createConnection();
-	service::client::Service client(*httpConnection);
+	service::schemas::RunResponse runResponse;
+	{
+		auto httpConnection = createConnection();
+		service::client::Service client(*httpConnection);
 
-	service::schemas::RunRequest runRequest;
-	runRequest.eventType = options.getEventType();
-	runRequest.priority = options.getPriority() < 0 ? 0 : options.getPriority();
-	for(const auto& setting : options.getSettings()) {
-		runRequest.settings.push_back(service::schemas::Setting::make(setting.first, setting.second));
+		service::schemas::RunRequest runRequest;
+		runRequest.eventType = options.getEventType();
+		runRequest.priority = options.getPriority() < 0 ? 0 : options.getPriority();
+		for(const auto& setting : options.getSettings()) {
+			runRequest.settings.push_back(service::schemas::Setting::make(setting.first, setting.second));
+		}
+		runRequest.condition = options.getCondition().empty() ? "${TRUE}" : options.getCondition();
+
+		runResponse = client.runTask(runRequest);
+		logger.info << "Task ID    : \"" << runResponse.jobId << "\"\n";
 	}
-	runRequest.condition = options.getCondition().empty() ? "${TRUE}" : options.getCondition();
 
-	service::schemas::RunResponse runResponse = client.runTask(runRequest);
-	logger.info << "Task ID: \"" << runResponse.jobId << "\"\n";
-	logger.info << "Message: \"" << runResponse.message << "\"\n";
+	if(options.getWait()) {
+		logger.info << "-----------------\n";
+		waitTask(runResponse.jobId);
+	}
 }
 
-void Main::waitTask() {
+void Main::waitTask(const std::string& taskId) {
+	service::schemas::JobStatusHead oldTaskHead;
+	{
+		auto httpConnection = createConnection();
+		service::client::Service client(*httpConnection);
 
+		std::unique_ptr<service::schemas::JobStatusHead> taskHead = client.getTask(taskId);
+		if(!taskHead) {
+			return;
+		}
+
+		rc = taskHead->returnCode;
+		common::types::State::Type state = common::types::State::toState(taskHead->state);
+
+		logger.info << "State      : \"" << taskHead->state << "\"\n";
+		logger.info << "Created TS : \"" << taskHead->tsCreated << "\"\n";
+		if(state != common::types::State::queued) {
+			logger.info << "Running TS : \"" << taskHead->tsRunning << "\"\n";
+		}
+		if(state == common::types::State::done || state == common::types::State::signaled) {
+			logger.info << "Finished TS: \"" << taskHead->tsFinished << "\"\n";
+			logger.info << "Return code: \"" << taskHead->returnCode << "\"\n";
+		}
+		if(state == common::types::State::signaled) {
+			logger.info << "Message    : \"" << taskHead->message << "\"\n";
+		}
+
+		oldTaskHead = *taskHead;
+	}
+
+	while(true) {
+		std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+
+		auto httpConnection = createConnection();
+		service::client::Service client(*httpConnection);
+
+		std::unique_ptr<service::schemas::JobStatusHead> taskHead = client.getTask(taskId);
+		if(!taskHead) {
+			break;
+		}
+
+		if(oldTaskHead.state == taskHead->state) {
+			continue;
+		}
+
+		rc = taskHead->returnCode;
+		common::types::State::Type state = common::types::State::toState(taskHead->state);
+
+		if(state == common::types::State::done || state == common::types::State::signaled || state == common::types::State::zombie) {
+			break;
+		}
+
+		logger.info << "-----------------\n";
+		logger.info << "State      : \"" << taskHead->state << "\"\n";
+		if(state == common::types::State::queued) {
+			logger.info << "Created TS : \"" << taskHead->tsCreated << "\"\n";
+		}
+		else if(state == common::types::State::running || state == common::types::State::zombie) {
+			logger.info << "Running TS : \"" << taskHead->tsRunning << "\"\n";
+		}
+		else if(state == common::types::State::done) {
+			logger.info << "Finished TS: \"" << taskHead->tsFinished << "\"\n";
+			logger.info << "Return code: \"" << taskHead->returnCode << "\"\n";
+		}
+		else if(state == common::types::State::signaled) {
+			logger.info << "Finished TS: \"" << taskHead->tsFinished << "\"\n";
+			logger.info << "Return code: \"" << taskHead->returnCode << "\"\n";
+			logger.info << "Message    : \"" << taskHead->message << "\"\n";
+		}
+
+		oldTaskHead = *taskHead;
+	}
 }
 
 void Main::signalTask() {
+	auto httpConnection = createConnection();
+	service::client::Service client(*httpConnection);
 
+	client.sendSignal(options.getTaskId(), options.getSignal());
 }
 
 void Main::showTask() {
@@ -100,6 +182,10 @@ void Main::showTask() {
 
 void Main::showTasks() {
 
+}
+
+int Main::getReturnCode() const {
+	return rc;
 }
 
 std::unique_ptr<esl::com::http::client::Connection> Main::createConnection() {

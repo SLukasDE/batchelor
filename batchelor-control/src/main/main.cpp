@@ -30,9 +30,9 @@ int main(int argc, const char* argv[]) {
 	    esl::system::Stacktrace::init("eslx/system/Stacktrace", {});
 		esl::logging::Logging::initWithFile("logger.xml");
 
-		Main { options };
+		Main main{ options };
 
-		rc = 0;
+		rc = main.getReturnCode();
 	}
     catch(const ArgumentsException& e) {
     	std::cerr << e.what() << "\n";

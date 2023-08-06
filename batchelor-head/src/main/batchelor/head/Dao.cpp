@@ -17,7 +17,6 @@
 #include <sstream>
 #include <time.h>
 
-#include <iostream>
 namespace batchelor {
 namespace head {
 namespace {
@@ -147,8 +146,6 @@ bool Dao::insertTask(const Task& task) {
     esl::database::PreparedStatement statement = dbConnection.prepare(sqlStr);
 
     std::int64_t createdTSDuration = std::chrono::time_point_cast<std::chrono::milliseconds>(task.createdTS).time_since_epoch().count();
-std::cerr << createdTSDuration << "\n";
-std::cerr << toString(std::chrono::time_point<std::chrono::system_clock>(std::chrono::milliseconds(createdTSDuration))) << "\n";
 
     statement.execute(
 		task.taskId,
@@ -320,9 +317,6 @@ std::unique_ptr<Dao::Task> Dao::loadTaskByTaskId(const std::string& taskId) {
     	task->condition = resultSet[6].isNull() ? "" : resultSet[6].asString();
     	if(!resultSet[7].isNull()) {
     		task->createdTS = std::chrono::time_point<std::chrono::system_clock>(std::chrono::milliseconds(resultSet[7].asInteger()));
-
-std::cerr << resultSet[7].asInteger() << "\n";
-std::cerr << toString(task->createdTS) << "\n";
     	}
     	task->startTS = toTimepoint(resultSet[8].isNull() ? "" : resultSet[8].asString());
     	task->endTS = toTimepoint(resultSet[9].isNull() ? "" : resultSet[9].asString());
@@ -364,9 +358,6 @@ std::unique_ptr<Dao::Task> Dao::loadLatesQueuedOrRunningTaskByCrc32(const std::s
 
     	if(!resultSet[7].isNull()) {
     		createdTS = std::chrono::time_point<std::chrono::system_clock>(std::chrono::milliseconds(resultSet[7].asInteger()));
-
-std::cerr << resultSet[7].asInteger() << "\n";
-std::cerr << toString(createdTS) << "\n";
     		if(task && task->createdTS > createdTS) {
     			continue;
     		}

@@ -1,3 +1,4 @@
+#include <batchelor/head/CRC32.h>
 #include <batchelor/head/Service.h>
 #include <batchelor/head/Logger.h>
 
@@ -10,10 +11,12 @@
 #include <boost/uuid/uuid_io.hpp>
 
 #include <chrono>
+#include <cstdint>
 #include <ctime>
 #include <stdexcept>
 #include <time.h>
 
+#include <iostream>
 namespace batchelor {
 namespace head {
 namespace {
@@ -52,6 +55,27 @@ std::string getJSONTimestamp(const std::chrono::time_point<std::chrono::system_c
 
 	return buffer;
 }
+
+service::schemas::RunResponse makeRunResponse(const Dao::Task& task) {
+	service::schemas::RunResponse rv;
+
+	rv.jobId = task.taskId;
+	rv.message = common::types::State::toString(task.state);
+
+	return rv;
+}
+
+std::uint32_t makeCrc32(const service::schemas::RunRequest& runRequest) {
+	std::string crc32Str;
+	for(const auto& setting : runRequest.settings) {
+		if(!crc32Str.empty()) {
+			crc32Str += ";";
+		}
+		crc32Str += setting.key + "=" + setting.value;
+	}
+	return CRC32().pushData(crc32Str.c_str(), crc32Str.size()).get();
+}
+
 }
 
 Service::Service(const esl::object::Context& aContext, esl::database::ConnectionFactory& aDbConnectionFactory)
@@ -59,54 +83,104 @@ Service::Service(const esl::object::Context& aContext, esl::database::Connection
   dbConnectionFactory(aDbConnectionFactory)
 { }
 
-service::schemas::FetchResponse Service::fetchJob(const service::schemas::FetchRequest& fetchRequest) {
+service::schemas::FetchResponse Service::fetchTask(const service::schemas::FetchRequest& fetchRequest) {
 	service::schemas::FetchResponse rv;
 
 	return rv;
 }
 
-std::vector<service::schemas::JobStatusHead> Service::getJobs(const std::string& state) {
+std::vector<service::schemas::JobStatusHead> Service::getTasks(const std::string& state, const std::string& eventNotAfter, const std::string& eventNotBefore) {
 	std::vector<service::schemas::JobStatusHead> rv;
 
 	return rv;
 }
 
-std::unique_ptr<service::schemas::JobStatusHead> Service::getJob(const std::string& jobId) {
+std::unique_ptr<service::schemas::JobStatusHead> Service::getTask(const std::string& taskId) {
 	std::unique_ptr<service::schemas::JobStatusHead> rv;
+	std::unique_ptr<Dao::Task> task = getDao().loadTaskByTaskId(taskId);
+	if(task) {
+		rv.reset(new service::schemas::JobStatusHead);
 
+		rv->runConfiguration.eventType = task->eventType;
+		rv->runConfiguration.jobId = task->taskId;
+		rv->runConfiguration.settings = task->settings;
+
+		/* Metrics contains all metric variables and their values as used for the condition at the time the job has been assigned to a worker and state changed to running.
+		 * Available variables to get used in the formula are all variables delivered as metrics of "fetch-request" like
+		 * - cpu usage              (CPU_USAGE),
+		 * - memory usage           (MEM_USAGE),
+		 * - number of jobs running (RUNNING_JOBS),
+		 * - host name              (HOST_NAME),
+		 * - cloudId,
+		 * - workerId
+		 * - ...
+		 * as well as job specific variables provided by the head server, like
+		 * - waiting time,
+		 * - priority,
+		 * - ...
+		 */
+		//rv->metrics;
+
+		rv->state = common::types::State::toString(task->state);
+
+		rv->returnCode = task->returnCode;
+		rv->message = task->message;
+
+		rv->tsCreated = getJSONTimestamp(task->createdTS);
+		rv->tsRunning = getJSONTimestamp(task->startTS);
+		rv->tsFinished = getJSONTimestamp(task->endTS);
+		rv->tsLastHeartBeat = getJSONTimestamp(task->lastHeartbeatTS);
+	}
 	return rv;
 }
 
-void Service::sendSignal(const service::schemas::Signal& signal) {
-}
+service::schemas::RunResponse Service::runTask(const service::schemas::RunRequest& runRequest) {
+	service::schemas::RunResponse rv;
 
-service::schemas::RunResponse Service::runBatch(const service::schemas::RunRequest& runRequest) {
-	boost::uuids::uuid jobIdUUID; // initialize uuid
+	std::uint32_t crc32 = makeCrc32(runRequest);
 
-	Dao::Job job;
-	job.jobId = boost::uuids::to_string(jobIdUUID);
-	job.batchId = runRequest.batchId;
-	job.priority = runRequest.priority;
-	job.arguments = runRequest.arguments;
-	job.envVars = runRequest.envVars;
-	job.settings = runRequest.settings;
+	std::unique_ptr<Dao::Task> existingTask = getDao().loadLatesQueuedOrRunningTaskByCrc32(runRequest.eventType, crc32);
+	if(existingTask && (existingTask->state == common::types::State::queued || existingTask->state == common::types::State::running)) {
+std::cerr << "existing\n";
+		existingTask->priority = runRequest.priority;
+		existingTask->settings = runRequest.settings;
+		existingTask->condition = runRequest.condition;
+std::cerr << getJSONTimestamp(existingTask->createdTS) << "\n";
+		getDao().updateTask(*existingTask);
+
+		rv = makeRunResponse(*existingTask);
+	}
+	else {
+std::cerr << "not existing\n";
+		//boost::uuids::uuid taskIdUUID; // initialize uuid
+		static boost::uuids::random_generator rg;
+		boost::uuids::uuid taskIdUUID = rg();
+
+		Dao::Task task;
+		task.taskId = boost::uuids::to_string(taskIdUUID);
+		task.crc32 = crc32;
+		task.eventType = runRequest.eventType;
+		task.priority = runRequest.priority;
+		task.settings = runRequest.settings;
 #if 1
-	job.createdTS = std::chrono::system_clock::now();
+		task.createdTS = std::chrono::system_clock::now();
 #else
-	job.createdTS = getJSONTimestamp(std::chrono::system_clock::now());
+		task.createdTS = getJSONTimestamp(std::chrono::system_clock::now());
 #endif
-	job.state = common::types::State::Type::queued;
-	getDao().saveJob(job);
+		task.state = common::types::State::Type::queued;
+		getDao().saveTask(task);
+
+		rv = makeRunResponse(task);
+	}
 
 	//logger.info << "job.createdTS: " << getJSONTimestamp(job.createdTS) << "\n";
 
-	service::schemas::RunResponse rv;
-
 	//rv.jobId = "1234-ab3c-1234-ab3c-1234-ab3c-1234-ab3c";
-	rv.jobId = boost::uuids::to_string(jobIdUUID);
-	rv.message = "queued";
 
 	return rv;
+}
+
+void Service::sendSignal(const std::string& taskId, const std::string& signal) {
 }
 
 esl::database::Connection& Service::getDBConnection() const {

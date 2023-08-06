@@ -28,14 +28,14 @@ public:
 	Service(const esl::object::Context& context, esl::database::ConnectionFactory& dbConnectionFactory);
 
 	// used by worker
-	service::schemas::FetchResponse fetchJob(const service::schemas::FetchRequest& fetchRequest) override;
+	service::schemas::FetchResponse fetchTask(const service::schemas::FetchRequest& fetchRequest) override;
 
-	std::vector<service::schemas::JobStatusHead> getJobs(const std::string& state) override;
+	std::vector<service::schemas::JobStatusHead> getTasks(const std::string& state, const std::string& eventNotAfter, const std::string& eventNotBefore) override;
 
 	// used by cli
-	std::unique_ptr<service::schemas::JobStatusHead> getJob(const std::string& jobId) override;
-	void sendSignal(const service::schemas::Signal& signal) override;
-	service::schemas::RunResponse runBatch(const service::schemas::RunRequest& runRequest) override;
+	std::unique_ptr<service::schemas::JobStatusHead> getTask(const std::string& taskId) override;
+	service::schemas::RunResponse runTask(const service::schemas::RunRequest& runRequest) override;
+	void sendSignal(const std::string& taskId, const std::string& signal) override;
 
 private:
 	esl::database::Connection& getDBConnection() const;

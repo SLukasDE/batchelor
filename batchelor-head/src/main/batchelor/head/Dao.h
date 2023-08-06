@@ -7,6 +7,7 @@
 #include <esl/database/Connection.h>
 
 #include <chrono>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -21,13 +22,15 @@ public:
 		queued
 	};
 #endif
-	struct Job {
-		std::string jobId;
-		std::string batchId;
+	struct Task {
+		std::string taskId;
+		std::uint32_t crc32;
+		std::string eventType;
 		unsigned int priority = 0;
-		std::vector<std::string> arguments;
-		std::vector<service::schemas::Setting> envVars;
+		std::chrono::system_clock::time_point priorityTS;
 		std::vector<service::schemas::Setting> settings;
+		std::vector<std::string> signals;
+		std::string condition;
 
 		std::chrono::system_clock::time_point createdTS;
 		std::chrono::system_clock::time_point startTS;
@@ -41,14 +44,16 @@ public:
 
 	Dao(esl::database::Connection& dbConnection);
 
-	void saveJob(const Job& job);
-	std::vector<Job> loadJobs(const common::types::State::Type& state);
+	void saveTask(const Task& task);
+	bool insertTask(const Task& task);
+	bool updateTask(const Task& task);
 
-private:
-	bool insertJob(const Job& job);
-	bool updateJob(const Job& job);
+	std::vector<Task> loadTasks(const common::types::State::Type& state);
+	std::unique_ptr<Task> loadTaskByTaskId(const std::string& taskId);
+	std::unique_ptr<Task> loadLatesQueuedOrRunningTaskByCrc32(const std::string& eventType, std::uint32_t crc32);
 
 	esl::database::Connection& dbConnection;
+	const bool isSQLite;
 };
 
 } /* namespace head */

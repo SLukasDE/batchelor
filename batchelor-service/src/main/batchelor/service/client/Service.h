@@ -25,19 +25,19 @@ public:
     Service(const esl::com::http::client::Connection& connection);
 
 	// used by worker
-	schemas::FetchResponse fetchJob(const schemas::FetchRequest& fetchRequest) override;
+	schemas::FetchResponse fetchTask(const schemas::FetchRequest& fetchRequest) override;
 
 	// used by controller-cli
-	std::vector<schemas::JobStatusHead> getJobs(const std::string& state, const std::string& eventNotAfter, const std::string& eventNotBefore) override;
+	std::vector<schemas::JobStatusHead> getTasks(const std::string& state, const std::string& eventNotAfter, const std::string& eventNotBefore) override;
 
 	// used by controller-cli
-	std::unique_ptr<schemas::JobStatusHead> getJob(const std::string& jobId) override;
+	std::unique_ptr<schemas::JobStatusHead> getTask(const std::string& jobId) override;
 
 	// used by controller-cli
-	schemas::RunResponse runJob(const schemas::RunRequest& runRequest) override;
+	schemas::RunResponse runTask(const schemas::RunRequest& runRequest) override;
 
 	// used by controller-cli
-	void sendSignal(const std::string& jobId, const std::string& signal) override;
+	void sendSignal(const std::string& taskId, const std::string& signal) override;
 
 private:
     const esl::com::http::client::Connection& connection;

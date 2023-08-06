@@ -10,7 +10,7 @@
 		<parameter key="threads" value="4"/>
 		<parameter key="port" value="8080"/>
 		
-		<context implementation="jerry/http-host">
+		<context implementation="jerry4esl/http-host">
 			<parameter key="server-name" value="*"/>
 			<context>
 				<http-requesthandler implementation="batchelor-head">

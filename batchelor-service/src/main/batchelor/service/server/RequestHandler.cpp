@@ -78,13 +78,24 @@ public:
 	}
 
 	void process() override {
-		(this->*processHandler)();
+		try {
+			(this->*processHandler)();
+		}
+		catch(const esl::com::http::server::exception::StatusCode& e) {
+			throw;
+		}
+		catch(const std::exception& e) {
+	        throw esl::com::http::server::exception::StatusCode(500, esl::utility::MIME::Type::textPlain, e.what());
+		}
+		catch(...) {
+	        throw esl::com::http::server::exception::StatusCode(500, esl::utility::MIME::Type::textPlain, "unknown error");
+		}
 	}
 
-	// POST: "/fetchJob"
+	// POST: "/fetchTask"
 	void process_1() {
 		schemas::FetchRequest fetchRequest = sergut::JsonDeserializer(getString()).deserializeData<schemas::FetchRequest>();
-		schemas::FetchResponse fetchResponse = service->fetchJob(fetchRequest);
+		schemas::FetchResponse fetchResponse = service->fetchTask(fetchRequest);
 
 		std::string responseContent;
 		esl::utility::MIME responseMIME = getResponseMIME();
@@ -109,7 +120,7 @@ public:
 		requestContext.getConnection().send(response, std::move(output));
 	}
 
-	// GET: "/jobs[?[state={state}][&][nafter={eventNotAfter}][&][nbefore={eventNotBefore}]]"
+	// GET: "/tasks[?[state={state}][&][nafter={eventNotAfter}][&][nbefore={eventNotBefore}]]"
 	void process_2() {
 		std::string state;
 		if(requestContext.getRequest().hasArgument("state")) {
@@ -126,19 +137,19 @@ public:
 			eventNotBefore = requestContext.getRequest().getArgument("nbefore");
 		}
 
-		std::vector<schemas::JobStatusHead> jobIds = service->getJobs(state, eventNotAfter, eventNotBefore);
+		std::vector<schemas::JobStatusHead> taskStatus = service->getTasks(state, eventNotAfter, eventNotBefore);
 
 		std::string responseContent;
 		esl::utility::MIME responseMIME = getResponseMIME();
 
 		if(responseMIME == esl::utility::MIME::Type::applicationXml) {
 			sergut::XmlSerializer ser;
-			ser.serializeNestedData("jobs", "job", sergut::XmlValueType::Child, jobIds);
+			ser.serializeNestedData("tasks", "task", sergut::XmlValueType::Child, taskStatus);
 		    responseContent = ser.str();
 		}
 		else if(responseMIME == esl::utility::MIME::Type::applicationJson) {
 			sergut::JsonSerializer ser;
-			ser.serializeData(jobIds);
+			ser.serializeData(taskStatus);
 		    responseContent = ser.str();
 		}
 		else {
@@ -150,10 +161,10 @@ public:
 		requestContext.getConnection().send(response, std::move(output));
 	}
 
-	// GET: "/job/{jobId}"
+	// GET: "/task/{taskId}"
 	void process_3() {
-		const std::string& jobId = pathList[1];
-		std::unique_ptr<schemas::JobStatusHead> status = service->getJob(jobId);
+		const std::string& taskId = pathList[1];
+		std::unique_ptr<schemas::JobStatusHead> status = service->getTask(taskId);
 
 		if(!status) {
 			throw esl::com::http::server::exception::StatusCode(404, "{}");
@@ -181,10 +192,10 @@ public:
 		requestContext.getConnection().send(response, std::move(output));
 	}
 
-	// POST: "/job"
+	// POST: "/task"
 	void process_4() {
 		schemas::RunRequest runRequest = sergut::JsonDeserializer(getString()).deserializeData<schemas::RunRequest>();
-		schemas::RunResponse runResponse = service->runJob(runRequest);
+		schemas::RunResponse runResponse = service->runTask(runRequest);
 
 		std::string responseContent;
 		esl::utility::MIME responseMIME = getResponseMIME();
@@ -209,11 +220,11 @@ public:
 		requestContext.getConnection().send(response, std::move(output));
 	}
 
-	// POST: "/signal/{jobId}/{signal}"
+	// POST: "/signal/{taskId}/{signal}"
 	void process_5() {
-		const std::string& jobId = pathList[1];
+		const std::string& taskId = pathList[1];
 		const std::string& signal = pathList[2];
-		service->sendSignal(jobId, signal);
+		service->sendSignal(taskId, signal);
 
 		//throw esl::com::http::server::exception::StatusCode(200, "{}");
 		esl::utility::MIME responseMIME = esl::utility::MIME::Type::applicationJson;
@@ -267,27 +278,27 @@ esl::io::Input RequestHandler::accept(esl::com::http::server::RequestContext& re
 
 	esl::object::Context& objectContext = requestContext.getObjectContext();
 
-	// POST: "/fetchJob"
-	if(pathList.size() == 1 && pathList[0] == "fetchJob"
+	// POST: "/fetchTask"
+	if(pathList.size() == 1 && pathList[0] == "fetchTask"
 	&& requestContext.getRequest().getMethod() == esl::utility::HttpMethod::toString(esl::utility::HttpMethod::Type::httpPost)) {
 		writer.reset(new InputHandler(requestContext, &InputHandler::process_1, makeService(objectContext), std::move(pathList)));
 	}
-	// GET: "/jobs[?state={state}]"
-	else if(pathList.size() == 1 && pathList[0] == "jobs"
+	// GET: "/tasks[?state={state}]"
+	else if(pathList.size() == 1 && pathList[0] == "tasks"
 	&& requestContext.getRequest().getMethod() == esl::utility::HttpMethod::toString(esl::utility::HttpMethod::Type::httpGet)) {
 		writer.reset(new InputHandler(requestContext, &InputHandler::process_2, makeService(objectContext), std::move(pathList)));
 	}
-	// GET: "/job/{jobId}"
-	else if(pathList.size() == 2 && pathList[0] == "job"
+	// GET: "/task/{taskId}"
+	else if(pathList.size() == 2 && pathList[0] == "task"
 	&& requestContext.getRequest().getMethod() == esl::utility::HttpMethod::toString(esl::utility::HttpMethod::Type::httpGet)) {
 		writer.reset(new InputHandler(requestContext, &InputHandler::process_3, makeService(objectContext), std::move(pathList)));
 	}
-	// POST: "/job"
-	else if(pathList.size() == 1 && pathList[0] == "job"
+	// POST: "/task"
+	else if(pathList.size() == 1 && pathList[0] == "task"
 	&& requestContext.getRequest().getMethod() == esl::utility::HttpMethod::toString(esl::utility::HttpMethod::Type::httpPost)) {
 		writer.reset(new InputHandler(requestContext, &InputHandler::process_4, makeService(objectContext), std::move(pathList)));
 	}
-	// POST: "/signal/{jobId}/{signal}"
+	// POST: "/signal/{taskId}/{signal}"
 	else if(pathList.size() == 3 && pathList[0] == "signal"
 	&& requestContext.getRequest().getMethod() == esl::utility::HttpMethod::toString(esl::utility::HttpMethod::Type::httpPut)) {
 		writer.reset(new InputHandler(requestContext, &InputHandler::process_5, makeService(objectContext), std::move(pathList)));

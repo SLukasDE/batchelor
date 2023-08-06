@@ -46,16 +46,60 @@ void Main::sendEvent() {
 	service::client::Service client(*httpConnection);
 
 	service::schemas::RunRequest runRequest;
-	runRequest.eventType = "bestoptxl";
-	runRequest.priority = 0;
-	runRequest.settings.push_back(service::schemas::Setting::make("env", "DISPLAY=0"));
-	runRequest.settings.push_back(service::schemas::Setting::make("env", "TMP_DIR=/tmp"));
-	runRequest.settings.push_back(service::schemas::Setting::make("args", "--WW_BEREICH=0 --propertyId=Bla --propertyFile=/wxx/secret/property.cfg"));
-	runRequest.condition = "${TRUE}";
+	runRequest.eventType = options.getEventType();
+	runRequest.priority = options.getPriority() < 0 ? 0 : options.getPriority();
+	for(const auto& setting : options.getSettings()) {
+		runRequest.settings.push_back(service::schemas::Setting::make(setting.first, setting.second));
+	}
+	runRequest.condition = options.getCondition().empty() ? "${TRUE}" : options.getCondition();
 
-	service::schemas::RunResponse runResponse = client.runJob(runRequest);
-	logger.info << "Job ID : \"" << runResponse.jobId << "\"\n";
+	service::schemas::RunResponse runResponse = client.runTask(runRequest);
+	logger.info << "Task ID: \"" << runResponse.jobId << "\"\n";
 	logger.info << "Message: \"" << runResponse.message << "\"\n";
+}
+
+void Main::waitTask() {
+
+}
+
+void Main::signalTask() {
+
+}
+
+void Main::showTask() {
+	auto httpConnection = createConnection();
+	service::client::Service client(*httpConnection);
+
+	std::unique_ptr<service::schemas::JobStatusHead> taskHead = client.getTask(options.getTaskId());
+	if(taskHead) {
+		logger.info << "Task ID    : \"" << taskHead->runConfiguration.jobId << "\"\n";
+		logger.info << "Event type : \"" << taskHead->runConfiguration.eventType << "\"\n";
+		if(taskHead->runConfiguration.settings.empty()) {
+			logger.info << "Settings   : (empty)\n";
+		}
+		else {
+			logger.info << "Settings   :\n";
+			for(std::size_t i = 0; i<taskHead->runConfiguration.settings.size(); ++i) {
+				logger.info << "  [" << (i+1) << "]: \"" << taskHead->runConfiguration.settings[i].key << "\" = \"" << taskHead->runConfiguration.settings[i].value << "\"\n";
+			}
+
+		}
+		logger.info << "Metrics    :\n";
+		for(std::size_t i = 0; i<taskHead->metrics.size(); ++i) {
+			logger.info << "  [" << (i+1) << "]: \"" << taskHead->metrics[i].key << "\" = \"" << taskHead->runConfiguration.settings[i].value << "\"\n";
+		}
+		logger.info << "State      : \"" << taskHead->state << "\"\n";
+		logger.info << "Return code: \"" << taskHead->returnCode << "\"\n";
+		logger.info << "Message    : \"" << taskHead->message << "\"\n";
+		logger.info << "Created TS : \"" << taskHead->tsCreated << "\"\n";
+		logger.info << "Running TS : \"" << taskHead->tsRunning << "\"\n";
+		logger.info << "Finished TS: \"" << taskHead->tsFinished << "\"\n";
+		logger.info << "Heartbeat  : \"" << taskHead->tsLastHeartBeat << "\"\n";
+	}
+}
+
+void Main::showTasks() {
+
 }
 
 std::unique_ptr<esl::com::http::client::Connection> Main::createConnection() {
@@ -77,22 +121,6 @@ esl::com::http::client::ConnectionFactory& Main::getConnectionFactory() {
 		throw esl::system::Stacktrace::add(std::runtime_error("cannot create http connection factory."));
 	}
 	return *httpConnectionFactory;
-}
-
-void Main::waitTask() {
-
-}
-
-void Main::signalTask() {
-
-}
-
-void Main::showTask() {
-
-}
-
-void Main::showTasks() {
-
 }
 
 } /* namespace control */

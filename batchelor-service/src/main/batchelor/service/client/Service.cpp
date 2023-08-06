@@ -33,10 +33,10 @@ Service::Service(const esl::com::http::client::Connection& aConnection)
 : connection(aConnection)
 { }
 
-schemas::FetchResponse Service::fetchJob(const schemas::FetchRequest& fetchRequest) {
+schemas::FetchResponse Service::fetchTask(const schemas::FetchRequest& fetchRequest) {
 	schemas::FetchResponse fetchResponse;
 
-	static const std::string serviceUrl = "fetchJob";
+	static const std::string serviceUrl = "fetchTask";
     esl::com::http::client::Request request(serviceUrl, esl::utility::HttpMethod::Type::httpPost, esl::utility::MIME::Type::applicationJson);
     request.addHeader("Accept", esl::utility::MIME::toString(esl::utility::MIME::Type::applicationJson) + "," + esl::utility::MIME::toString(esl::utility::MIME::Type::applicationXml));
 
@@ -75,10 +75,10 @@ schemas::FetchResponse Service::fetchJob(const schemas::FetchRequest& fetchReque
     return fetchResponse;
 }
 
-std::vector<schemas::JobStatusHead> Service::getJobs(const std::string& state, const std::string& eventNotAfter, const std::string& eventNotBefore) {
+std::vector<schemas::JobStatusHead> Service::getTasks(const std::string& state, const std::string& eventNotAfter, const std::string& eventNotBefore) {
 	std::vector<schemas::JobStatusHead> jobs;
 
-	std::string serviceUrl = "jobs";
+	std::string serviceUrl = "tasks";
 	{
 		std::string args;
 
@@ -124,8 +124,6 @@ std::vector<schemas::JobStatusHead> Service::getJobs(const std::string& state, c
         	throw esl::system::Stacktrace::add(std::runtime_error("Received not supported response content type \"" + response.getContentType().toString() + "\""));
         }
     }
-    else if(response.getStatusCode() == 204) {
-    }
     else {
     	throw esl::system::Stacktrace::add(std::runtime_error("Received not supported status code \"" + std::to_string(response.getStatusCode()) + "\""));
     }
@@ -133,10 +131,10 @@ std::vector<schemas::JobStatusHead> Service::getJobs(const std::string& state, c
     return jobs;
 }
 
-std::unique_ptr<schemas::JobStatusHead> Service::getJob(const std::string& jobId) {
+std::unique_ptr<schemas::JobStatusHead> Service::getTask(const std::string& taskId) {
 	std::unique_ptr<schemas::JobStatusHead> status;
 
-	std::string serviceUrl = "job/" + jobId;
+	std::string serviceUrl = "task/" + taskId;
     esl::com::http::client::Request request(serviceUrl, esl::utility::HttpMethod::Type::httpGet, esl::utility::MIME::Type::applicationJson);
     request.addHeader("Accept", esl::utility::MIME::toString(esl::utility::MIME::Type::applicationJson) + "," + esl::utility::MIME::toString(esl::utility::MIME::Type::applicationXml));
 
@@ -164,7 +162,7 @@ std::unique_ptr<schemas::JobStatusHead> Service::getJob(const std::string& jobId
         	throw esl::system::Stacktrace::add(std::runtime_error("Received not supported response content type \"" + response.getContentType().toString() + "\""));
         }
     }
-    else if(response.getStatusCode() == 204) {
+    else if(response.getStatusCode() == 404) {
     }
     else {
     	throw esl::system::Stacktrace::add(std::runtime_error("Received not supported status code \"" + std::to_string(response.getStatusCode()) + "\""));
@@ -173,10 +171,10 @@ std::unique_ptr<schemas::JobStatusHead> Service::getJob(const std::string& jobId
     return status;
 }
 
-schemas::RunResponse Service::runJob(const schemas::RunRequest& runRequest) {
+schemas::RunResponse Service::runTask(const schemas::RunRequest& runRequest) {
 	schemas::RunResponse runResponse;
 
-	static const std::string serviceUrl = "job";
+	static const std::string serviceUrl = "task";
 
 #if 0
     std::map<std::string, std::string> requestHeaders;
@@ -219,14 +217,14 @@ schemas::RunResponse Service::runJob(const schemas::RunRequest& runRequest) {
     else if(response.getStatusCode() == 204) {
     }
     else {
-    	throw esl::system::Stacktrace::add(std::runtime_error("Received not supported status code \"" + std::to_string(response.getStatusCode()) + "\""));
+    	throw esl::system::Stacktrace::add(std::runtime_error("Received not supported status code \"" + std::to_string(response.getStatusCode()) + "\"\ncontent type: \"" + response.getContentType().toString() + "\"\ncontent: \"" + consumerString.getString() + "\""));
     }
 
     return runResponse;
 }
 
-void Service::sendSignal(const std::string& jobId, const std::string& signal) {
-    static const std::string serviceUrl = "signal/" + jobId + "/" + signal;
+void Service::sendSignal(const std::string& taskId, const std::string& signal) {
+    static const std::string serviceUrl = "signal/" + taskId + "/" + signal;
 
     esl::com::http::client::Request request(serviceUrl, esl::utility::HttpMethod::Type::httpPost, esl::utility::MIME::Type::applicationJson);
 

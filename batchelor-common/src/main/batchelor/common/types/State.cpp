@@ -37,7 +37,7 @@ const std::string& State::toString(const Type& state) {
 	throw esl::system::Stacktrace::add(std::runtime_error("unknown state."));
 }
 
-State::Type toState(const std::string& state) {
+State::Type State::toState(const std::string& state) {
 	if(state == stateStrQueued) {
 		return State::Type::queued;
 	}

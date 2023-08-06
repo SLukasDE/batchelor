@@ -323,7 +323,7 @@ void Options::setPriority(const char* aPriority) {
 }
 
 int Options::getPriority() const noexcept {
-	return priority < 0 ? 0 : priority;
+	return priority;
 }
 
 void Options::addSetting(const char* aKey, const char* aValue) {
@@ -356,8 +356,7 @@ void Options::setCondition(const char* aCondition) {
 }
 
 const std::string& Options::getCondition() const noexcept {
-	static const std::string defaultCondition = "${TRUE}";
-	return condition.empty() ? defaultCondition : condition;
+	return condition;
 }
 
 void Options::setWait() {

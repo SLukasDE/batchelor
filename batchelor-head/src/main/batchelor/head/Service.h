@@ -6,8 +6,7 @@
 #include <batchelor/service/Service.h>
 #include <batchelor/service/schemas/FetchResponse.h>
 #include <batchelor/service/schemas/FetchRequest.h>
-#include <batchelor/service/schemas/JobStatusHead.h>
-#include <batchelor/service/schemas/JobStatusWorker.h>
+#include <batchelor/service/schemas/TaskStatusHead.h>
 #include <batchelor/service/schemas/RunRequest.h>
 #include <batchelor/service/schemas/RunResponse.h>
 #include <batchelor/service/schemas/Signal.h>
@@ -30,10 +29,10 @@ public:
 	// used by worker
 	service::schemas::FetchResponse fetchTask(const service::schemas::FetchRequest& fetchRequest) override;
 
-	std::vector<service::schemas::JobStatusHead> getTasks(const std::string& state, const std::string& eventNotAfter, const std::string& eventNotBefore) override;
+	std::vector<service::schemas::TaskStatusHead> getTasks(const std::string& state, const std::string& eventNotAfter, const std::string& eventNotBefore) override;
 
 	// used by cli
-	std::unique_ptr<service::schemas::JobStatusHead> getTask(const std::string& taskId) override;
+	std::unique_ptr<service::schemas::TaskStatusHead> getTask(const std::string& taskId) override;
 	service::schemas::RunResponse runTask(const service::schemas::RunRequest& runRequest) override;
 	void sendSignal(const std::string& taskId, const std::string& signal) override;
 

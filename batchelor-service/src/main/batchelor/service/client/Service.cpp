@@ -66,8 +66,6 @@ schemas::FetchResponse Service::fetchTask(const schemas::FetchRequest& fetchRequ
         	throw esl::system::Stacktrace::add(std::runtime_error("Received not supported response content type \"" + response.getContentType().toString() + "\""));
         }
     }
-    else if(response.getStatusCode() == 204) {
-    }
     else {
     	throw esl::system::Stacktrace::add(std::runtime_error("Received not supported status code \"" + std::to_string(response.getStatusCode()) + "\""));
     }
@@ -75,8 +73,8 @@ schemas::FetchResponse Service::fetchTask(const schemas::FetchRequest& fetchRequ
     return fetchResponse;
 }
 
-std::vector<schemas::JobStatusHead> Service::getTasks(const std::string& state, const std::string& eventNotAfter, const std::string& eventNotBefore) {
-	std::vector<schemas::JobStatusHead> jobs;
+std::vector<schemas::TaskStatusHead> Service::getTasks(const std::string& state, const std::string& eventNotAfter, const std::string& eventNotBefore) {
+	std::vector<schemas::TaskStatusHead> tasks;
 
 	std::string serviceUrl = "tasks";
 	{
@@ -111,13 +109,13 @@ std::vector<schemas::JobStatusHead> Service::getTasks(const std::string& state, 
         if(response.getContentType() == esl::utility::MIME::Type::applicationJson) {
         	if(!inputWriterString.getString().empty()) {
                 sergut::JsonDeserializer deSerializer(inputWriterString.getString());
-                jobs = deSerializer.deserializeData<std::vector<schemas::JobStatusHead>>();
+                tasks = deSerializer.deserializeData<std::vector<schemas::TaskStatusHead>>();
         	}
         }
         else if(response.getContentType() == esl::utility::MIME::Type::applicationXml) {
         	if(!inputWriterString.getString().empty()) {
                 sergut::XmlDeserializer deSerializer(inputWriterString.getString());
-                jobs = deSerializer.deserializeNestedData<std::vector<schemas::JobStatusHead>>("jobs", "job");
+                tasks = deSerializer.deserializeNestedData<std::vector<schemas::TaskStatusHead>>("tasks", "task");
         	}
         }
         else {
@@ -128,11 +126,11 @@ std::vector<schemas::JobStatusHead> Service::getTasks(const std::string& state, 
     	throw esl::system::Stacktrace::add(std::runtime_error("Received not supported status code \"" + std::to_string(response.getStatusCode()) + "\""));
     }
 
-    return jobs;
+    return tasks;
 }
 
-std::unique_ptr<schemas::JobStatusHead> Service::getTask(const std::string& taskId) {
-	std::unique_ptr<schemas::JobStatusHead> status;
+std::unique_ptr<schemas::TaskStatusHead> Service::getTask(const std::string& taskId) {
+	std::unique_ptr<schemas::TaskStatusHead> status;
 
 	std::string serviceUrl = "task/" + taskId;
     esl::com::http::client::Request request(serviceUrl, esl::utility::HttpMethod::Type::httpGet, esl::utility::MIME::Type::applicationJson);
@@ -146,16 +144,16 @@ std::unique_ptr<schemas::JobStatusHead> Service::getTask(const std::string& task
     if(response.getStatusCode() == 200) {
         if(response.getContentType() == esl::utility::MIME::Type::applicationJson) {
         	if(!consumerString.getString().empty()) {
-        		status.reset(new schemas::JobStatusHead);
+        		status.reset(new schemas::TaskStatusHead);
                 sergut::JsonDeserializer deSerializer(consumerString.getString());
-                *status = deSerializer.deserializeData<schemas::JobStatusHead>();
+                *status = deSerializer.deserializeData<schemas::TaskStatusHead>();
         	}
         }
         else if(response.getContentType() == esl::utility::MIME::Type::applicationXml) {
         	if(!consumerString.getString().empty()) {
-        		status.reset(new schemas::JobStatusHead);
+        		status.reset(new schemas::TaskStatusHead);
                 sergut::XmlDeserializer deSerializer(consumerString.getString());
-                *status = deSerializer.deserializeData<schemas::JobStatusHead>("status");
+                *status = deSerializer.deserializeData<schemas::TaskStatusHead>("status");
         	}
         }
         else {

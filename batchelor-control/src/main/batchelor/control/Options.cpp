@@ -1,4 +1,5 @@
-#include <batchelor/control/ArgumentsException.h>
+#include <batchelor/common/ArgumentsException.h>
+
 #include <batchelor/control/Options.h>
 
 #include <cstring>
@@ -6,6 +7,9 @@
 
 namespace batchelor {
 namespace control {
+
+using namespace batchelor::common;
+
 namespace {
 
 static const std::string commandStrHelp = "help";
@@ -57,35 +61,14 @@ Command strToCommand(const std::string& commandStr) {
 	}
 	throw ArgumentsException("'" + commandStr + "' is no valid command.");
 }
-
+/*
 static const std::string stateStrWaiting = "waiting";
 static const std::string stateStrTimeout = "timeout";
 static const std::string stateStrRunning = "running";
 static const std::string stateStrDone = "done";
 static const std::string stateStrFailed = "failed";
 static const std::string stateStrZombi = "zombi";
-
-State strToState(const std::string& stateStr) {
-	if(stateStr == stateStrWaiting) {
-		return State::waiting;
-	}
-	if(stateStr == stateStrTimeout) {
-		return State::timeout;
-	}
-	if(stateStr == stateStrRunning) {
-		return State::running;
-	}
-	if(stateStr == stateStrDone) {
-		return State::done;
-	}
-	if(stateStr == stateStrFailed) {
-		return State::failed;
-	}
-	if(stateStr == stateStrZombi) {
-		return State::zombi;
-	}
-	throw ArgumentsException("Invalid value '" + stateStr + "' of option \"--state\".");
-}
+*/
 }
 
 Options::Options(int argc, const char* argv[]) {
@@ -421,14 +404,14 @@ void Options::setState(const char* value) {
 		throw ArgumentsException("Value missing of option \"--state\".");
 	}
 
-	state.reset(new State(strToState(value)));
+	state.reset(new common::types::State::Type(common::types::State::toState(value)));
 
 	if(!command && *command != Command::showTasks) {
 		throw ArgumentsException("Command \"" + commandToStr(*command) + "\" does not allow to use option \"--state\".");
 	}
 }
 
-State Options::getState() const {
+common::types::State::Type Options::getState() const {
 	if(!state) {
 		throw ArgumentsException("Option '--state' is missing.");
 	}
@@ -498,7 +481,7 @@ void Options::addURL(const char* value) {
 		throw ArgumentsException("Value missing of option \"--server-url\".");
 	}
 
-	Server server;
+	common::Server server;
 	server.username = currentUsername;
 	server.password = currentPassword;
 	server.url = value;
@@ -506,7 +489,7 @@ void Options::addURL(const char* value) {
 	servers.push_back(server);
 }
 
-const std::vector<Server>& Options::getServers() const noexcept {
+const std::vector<common::Server>& Options::getServers() const noexcept {
 	return servers;
 }
 
@@ -557,7 +540,7 @@ void Options::printUsage() {
 	std::cout << "\n";
 	std::cout << "OPTIONS specific for command 'show-tasks':\n";
 	std::cout << "  -S, --state            <state>          Specifies a filter to select events that that matches to the specified state.\n";
-	std::cout << "                                          Available states are 'waiting', 'timeout', 'running', 'done', 'failed' and 'zombi'.\n";
+	std::cout << "                                          Available states are 'queued', 'running', 'done', 'signaled' and 'zombi'.\n";
 	std::cout << "  -A, --event-not-after  <timestamp>      Specifies a filter to select events that has been sent not after the specified timestamp.\n";
 	std::cout << "  -B, --event-not-before <timestamp>      Specifies a filter to select events that has been sent not before the specified timestamp.\n";
 	std::cout << "                                          Format of <timestamp> is 'YYYY-MM-DD hh:mm:ss'\n";

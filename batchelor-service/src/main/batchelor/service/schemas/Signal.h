@@ -10,12 +10,12 @@ namespace service {
 namespace schemas {
 
 struct Signal {
-	std::string jobId;
+	std::string taskId;
 	std::string signal;
 };
 
 SERGUT_FUNCTION(Signal, data, ar) {
-    ar & SERGUT_MMEMBER(data, jobId)
+    ar & SERGUT_MMEMBER(data, taskId)
        & SERGUT_MMEMBER(data, signal);
 }
 

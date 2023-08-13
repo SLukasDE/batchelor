@@ -10,12 +10,12 @@ namespace service {
 namespace schemas {
 
 struct RunResponse {
-	std::string jobId;
+	std::string taskId;
 	std::string message;
 };
 
 SERGUT_FUNCTION(RunResponse, data, ar) {
-    ar & SERGUT_MMEMBER(data, jobId)
+    ar & SERGUT_MMEMBER(data, taskId)
        & SERGUT_MMEMBER(data, message);
 }
 

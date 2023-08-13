@@ -137,7 +137,7 @@ public:
 			eventNotBefore = requestContext.getRequest().getArgument("nbefore");
 		}
 
-		std::vector<schemas::JobStatusHead> taskStatus = service->getTasks(state, eventNotAfter, eventNotBefore);
+		std::vector<schemas::TaskStatusHead> taskStatus = service->getTasks(state, eventNotAfter, eventNotBefore);
 
 		std::string responseContent;
 		esl::utility::MIME responseMIME = getResponseMIME();
@@ -164,7 +164,7 @@ public:
 	// GET: "/task/{taskId}"
 	void process_3() {
 		const std::string& taskId = pathList[1];
-		std::unique_ptr<schemas::JobStatusHead> status = service->getTask(taskId);
+		std::unique_ptr<schemas::TaskStatusHead> status = service->getTask(taskId);
 
 		if(!status) {
 			throw esl::com::http::server::exception::StatusCode(404, "{}");

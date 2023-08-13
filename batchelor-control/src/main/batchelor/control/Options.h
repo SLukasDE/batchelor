@@ -1,9 +1,10 @@
 #ifndef BATCHELOR_CONTROL_OPTIONS_H_
 #define BATCHELOR_CONTROL_OPTIONS_H_
 
+#include <batchelor/common/Server.h>
+#include <batchelor/common/types/State.h>
+
 #include <batchelor/control/Command.h>
-#include <batchelor/control/State.h>
-#include <batchelor/control/Server.h>
 
 #include <memory>
 #include <string>
@@ -42,7 +43,7 @@ public:
 	const std::string& getSignal() const noexcept;
 
 	void setState(const char* state);
-	State getState() const;
+	common::types::State::Type getState() const;
 
 	void setEventNotAfter(const char* eventNotAfter);
 	const std::string& getEventNotAfter() const noexcept;
@@ -54,7 +55,7 @@ public:
 	void setUsername(const char* value);
 	void setPassword(const char* value);
 	void addURL(const char* value);
-	const std::vector<Server>& getServers() const noexcept;
+	const std::vector<common::Server>& getServers() const noexcept;
 
 	static void printUsage();
 
@@ -67,14 +68,14 @@ private:
 	bool wait = false;
 	std::string taskId;
 	std::string signal;
-	std::unique_ptr<State> state;
+	std::unique_ptr<common::types::State::Type> state;
 	std::string eventNotAfter;
 	std::string eventNotBefore;
 
 	// connection options
 	std::string currentUsername;
 	std::string currentPassword;
-	std::vector<Server> servers;
+	std::vector<common::Server> servers;
 };
 
 } /* namespace control */

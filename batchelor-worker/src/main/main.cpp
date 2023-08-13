@@ -1,8 +1,8 @@
 #include <batchelor/common/ArgumentsException.h>
 
-#include <batchelor/control/Logger.h>
-#include <batchelor/control/Main.h>
-#include <batchelor/control/Options.h>
+#include <batchelor/worker/Logger.h>
+#include <batchelor/worker/Main.h>
+#include <batchelor/worker/Options.h>
 
 #include <esl/logging/Logging.h>
 #include <esl/plugin/Registry.h>
@@ -14,10 +14,10 @@
 #include <iostream>
 #include <stdexcept>
 
-batchelor::control::Logger logger("batchelor::control");
+batchelor::worker::Logger logger("batchelor::worker");
 
 int main(int argc, const char* argv[]) {
-	using namespace batchelor::control;
+	using namespace batchelor::worker;
 	using namespace batchelor::common;
 
 	int rc = -1;

@@ -1,7 +1,6 @@
 #ifndef BATCHELOR_SERVICE_SERVER_REQUESTHANDLER_H_
 #define BATCHELOR_SERVICE_SERVER_REQUESTHANDLER_H_
 
-//#include <batchelor/service/server/ServiceFactory.h>
 #include <batchelor/service/Service.h>
 
 #include <esl/com/http/server/RequestContext.h>

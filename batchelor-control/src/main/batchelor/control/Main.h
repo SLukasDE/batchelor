@@ -27,8 +27,8 @@ public:
 	int getReturnCode() const;
 
 private:
-	std::unique_ptr<esl::com::http::client::Connection> createConnection();
-	esl::com::http::client::ConnectionFactory& getConnectionFactory();
+	std::unique_ptr<esl::com::http::client::Connection> createHTTPConnection();
+	esl::com::http::client::ConnectionFactory& getHTTPConnectionFactory();
 
 	const Options& options;
 	std::string url;

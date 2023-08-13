@@ -6,6 +6,7 @@
 #include <batchelor/service/client/Service.h>
 #include <batchelor/service/schemas/RunRequest.h>
 #include <batchelor/service/schemas/RunResponse.h>
+#include <batchelor/service/schemas/TaskStatusHead.h>
 
 #include <esl/system/Stacktrace.h>
 
@@ -46,7 +47,7 @@ Main::Main(const Options& aOptions)
 void Main::sendEvent() {
 	service::schemas::RunResponse runResponse;
 	{
-		auto httpConnection = createConnection();
+		auto httpConnection = createHTTPConnection();
 		service::client::Service client(*httpConnection);
 
 		service::schemas::RunRequest runRequest;
@@ -58,103 +59,106 @@ void Main::sendEvent() {
 		runRequest.condition = options.getCondition().empty() ? "${TRUE}" : options.getCondition();
 
 		runResponse = client.runTask(runRequest);
-		logger.info << "Task ID    : \"" << runResponse.jobId << "\"\n";
+		logger.info << "Task ID    : \"" << runResponse.taskId << "\"\n";
 	}
 
 	if(options.getWait()) {
 		logger.info << "-----------------\n";
-		waitTask(runResponse.jobId);
+		waitTask(runResponse.taskId);
+	}
+}
+
+void printStatus(const service::schemas::TaskStatusHead& taskStatus) {
+	common::types::State::Type state = common::types::State::toState(taskStatus.state);
+
+	logger.info << "State      : \"" << taskStatus.state << "\"\n";
+	logger.info << "Created TS : \"" << taskStatus.tsCreated << "\"\n";
+	switch(state) {
+	case common::types::State::queued:
+		break;
+	case common::types::State::running:
+		logger.info << "Running TS : \"" << taskStatus.tsRunning << "\"\n";
+		break;
+	case common::types::State::done:
+		logger.info << "Running TS : \"" << taskStatus.tsRunning << "\"\n";
+		logger.info << "Finished TS: \"" << taskStatus.tsFinished << "\"\n";
+		logger.info << "Return code: \"" << taskStatus.returnCode << "\"\n";
+		break;
+	case common::types::State::signaled:
+		logger.info << "Running TS : \"" << taskStatus.tsRunning << "\"\n";
+		logger.info << "Finished TS: \"" << taskStatus.tsFinished << "\"\n";
+		logger.info << "Message    : \"" << taskStatus.message << "\"\n";
+		break;
+	case common::types::State::zombie:
+		logger.info << "Running TS : \"" << taskStatus.tsRunning << "\"\n";
+		logger.info << "Message    : \"" << taskStatus.message << "\"\n";
+		break;
 	}
 }
 
 void Main::waitTask(const std::string& taskId) {
-	service::schemas::JobStatusHead oldTaskHead;
+	service::schemas::TaskStatusHead oldTaskStatus;
 	{
-		auto httpConnection = createConnection();
+		auto httpConnection = createHTTPConnection();
 		service::client::Service client(*httpConnection);
 
-		std::unique_ptr<service::schemas::JobStatusHead> taskHead = client.getTask(taskId);
-		if(!taskHead) {
+		std::unique_ptr<service::schemas::TaskStatusHead> taskStatus = client.getTask(taskId);
+		if(!taskStatus) {
 			return;
 		}
 
-		rc = taskHead->returnCode;
-		common::types::State::Type state = common::types::State::toState(taskHead->state);
+		rc = taskStatus->returnCode;
 
-		logger.info << "State      : \"" << taskHead->state << "\"\n";
-		logger.info << "Created TS : \"" << taskHead->tsCreated << "\"\n";
-		if(state != common::types::State::queued) {
-			logger.info << "Running TS : \"" << taskHead->tsRunning << "\"\n";
-		}
-		if(state == common::types::State::done || state == common::types::State::signaled) {
-			logger.info << "Finished TS: \"" << taskHead->tsFinished << "\"\n";
-			logger.info << "Return code: \"" << taskHead->returnCode << "\"\n";
-		}
-		if(state == common::types::State::signaled) {
-			logger.info << "Message    : \"" << taskHead->message << "\"\n";
-		}
+		printStatus(*taskStatus);
 
-		oldTaskHead = *taskHead;
+		oldTaskStatus = *taskStatus;
 	}
 
 	while(true) {
-		std::this_thread::sleep_for(std::chrono::milliseconds(5000));
-
-		auto httpConnection = createConnection();
-		service::client::Service client(*httpConnection);
-
-		std::unique_ptr<service::schemas::JobStatusHead> taskHead = client.getTask(taskId);
-		if(!taskHead) {
-			break;
+		{
+			common::types::State::Type state = common::types::State::toState(oldTaskStatus.state);
+			if(state == common::types::State::done || state == common::types::State::signaled || state == common::types::State::zombie) {
+				break;
+			}
 		}
 
-		if(oldTaskHead.state == taskHead->state) {
+		std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+
+		auto httpConnection = createHTTPConnection();
+		service::client::Service client(*httpConnection);
+
+		std::unique_ptr<service::schemas::TaskStatusHead> taskStatus = client.getTask(taskId);
+		if(!taskStatus) {
+			return;
+		}
+
+		if(oldTaskStatus.state == taskStatus->state) {
 			continue;
 		}
 
-		rc = taskHead->returnCode;
-		common::types::State::Type state = common::types::State::toState(taskHead->state);
-
-		if(state == common::types::State::done || state == common::types::State::signaled || state == common::types::State::zombie) {
-			break;
-		}
+		rc = taskStatus->returnCode;
 
 		logger.info << "-----------------\n";
-		logger.info << "State      : \"" << taskHead->state << "\"\n";
-		if(state == common::types::State::queued) {
-			logger.info << "Created TS : \"" << taskHead->tsCreated << "\"\n";
-		}
-		else if(state == common::types::State::running || state == common::types::State::zombie) {
-			logger.info << "Running TS : \"" << taskHead->tsRunning << "\"\n";
-		}
-		else if(state == common::types::State::done) {
-			logger.info << "Finished TS: \"" << taskHead->tsFinished << "\"\n";
-			logger.info << "Return code: \"" << taskHead->returnCode << "\"\n";
-		}
-		else if(state == common::types::State::signaled) {
-			logger.info << "Finished TS: \"" << taskHead->tsFinished << "\"\n";
-			logger.info << "Return code: \"" << taskHead->returnCode << "\"\n";
-			logger.info << "Message    : \"" << taskHead->message << "\"\n";
-		}
+		printStatus(*taskStatus);
 
-		oldTaskHead = *taskHead;
+		oldTaskStatus = *taskStatus;
 	}
 }
 
 void Main::signalTask() {
-	auto httpConnection = createConnection();
+	auto httpConnection = createHTTPConnection();
 	service::client::Service client(*httpConnection);
 
 	client.sendSignal(options.getTaskId(), options.getSignal());
 }
 
 void Main::showTask() {
-	auto httpConnection = createConnection();
+	auto httpConnection = createHTTPConnection();
 	service::client::Service client(*httpConnection);
 
-	std::unique_ptr<service::schemas::JobStatusHead> taskHead = client.getTask(options.getTaskId());
+	std::unique_ptr<service::schemas::TaskStatusHead> taskHead = client.getTask(options.getTaskId());
 	if(taskHead) {
-		logger.info << "Task ID    : \"" << taskHead->runConfiguration.jobId << "\"\n";
+		logger.info << "Task ID    : \"" << taskHead->runConfiguration.taskId << "\"\n";
 		logger.info << "Event type : \"" << taskHead->runConfiguration.eventType << "\"\n";
 		if(taskHead->runConfiguration.settings.empty()) {
 			logger.info << "Settings   : (empty)\n";
@@ -188,15 +192,15 @@ int Main::getReturnCode() const {
 	return rc;
 }
 
-std::unique_ptr<esl::com::http::client::Connection> Main::createConnection() {
-	auto httpConnection = getConnectionFactory().createConnection();
+std::unique_ptr<esl::com::http::client::Connection> Main::createHTTPConnection() {
+	auto httpConnection = getHTTPConnectionFactory().createConnection();
 	if(!httpConnection) {
 		throw esl::system::Stacktrace::add(std::runtime_error("cannot create http connection."));
 	}
 	return httpConnection;
 }
 
-esl::com::http::client::ConnectionFactory& Main::getConnectionFactory() {
+esl::com::http::client::ConnectionFactory& Main::getHTTPConnectionFactory() {
 	if(!httpConnectionFactory) {
 		httpConnectionFactory = esl::plugin::Registry::get().create<esl::com::http::client::ConnectionFactory>(
 				"eslx/com/http/client/ConnectionFactory", {

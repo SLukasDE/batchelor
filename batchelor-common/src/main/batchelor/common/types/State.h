@@ -12,11 +12,11 @@ public:
 	State() = delete;
 
 	enum Type {
-		queued,
+		queued, // waiting
 		running,
-		zombie,
+		zombie, // waiting-timeout, running-timeout
 		done,
-		signaled
+		signaled // failed
 	};
 
 	static const std::string& toString(const Type& state);

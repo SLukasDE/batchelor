@@ -86,6 +86,19 @@ std::vector<service::schemas::Setting> toSettings(const std::string& settings) {
 	return {};
 }
 
+unsigned int calculatedEffectivePriority(unsigned int priority, std::chrono::system_clock::time_point priorityTS) {
+	auto minutes = std::chrono::duration_cast<std::chrono::minutes>(std::chrono::system_clock::now()-priorityTS).count();
+	if(minutes >= 24) {
+		minutes = 24;
+		logger.info << "Minutes = " << minutes << "\n";
+	}
+	if(minutes < 0) {
+		logger.warn << "Minutes = " << minutes << "\n";
+		minutes = 0;
+	}
+
+	return priority + minutes;
+}
 }
 
 Dao::Dao(esl::database::Connection& aDbConnection)
@@ -100,7 +113,8 @@ Dao::Dao(esl::database::Connection& aDbConnection)
             "PRIORITY INTEGER, "
             "PRIORITY_TS INTEGER, "
 	        "EVENT_TYPE TEXT, "
-            "SETTINGS BLOB, "
+	        "SETTINGS BLOB, "
+	        "METRICS BLOB, "
             "SIGNALS TEXT, "
             "CONDITION TEXT, "
             "CREATED_TS INTEGER, "
@@ -113,11 +127,11 @@ Dao::Dao(esl::database::Connection& aDbConnection)
 	}
 }
 
-void Dao::saveTask(const Task& job) {
-	if(insertTask(job)) {
+void Dao::saveTask(const Task& task) {
+	if(insertTask(task)) {
 		return;
 	}
-	if(updateTask(job)) {
+	if(updateTask(task)) {
 		return;
 	}
 }
@@ -130,6 +144,7 @@ bool Dao::insertTask(const Task& task) {
 			"PRIORITY_TS, "
 	        "EVENT_TYPE, "
 			"SETTINGS, "
+			"METRICS, "
 			"SIGNALS, "
             "CONDITION, "
 			"CREATED_TS, "
@@ -139,9 +154,9 @@ bool Dao::insertTask(const Task& task) {
 			"STATE, "
 			"RETURN_CODE, "
 			"MESSAGE) "
-			"VALUES (?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?);";
+			"VALUES (?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?);";
 
-	logger.trace << "Dao::insertJob statement: " << sqlStr << "\n";
+	logger.trace << "Dao::insertTask statement: " << sqlStr << "\n";
 
     esl::database::PreparedStatement statement = dbConnection.prepare(sqlStr);
 
@@ -154,6 +169,7 @@ bool Dao::insertTask(const Task& task) {
 		createdTSDuration,
 		task.eventType,
 		toString(task.settings),
+		toString(task.metrics),
 		task.condition,
 		createdTSDuration,
 		toString(task.startTS),
@@ -173,6 +189,7 @@ bool Dao::updateTask(const Task& task) {
 			"PRIORITY = ?, "
 			"PRIORITY_TS = ?, "
 			"SETTINGS = ?, "
+			"METRICS = ?, "
 			"SIGNALS = ?, "
 			"CONDITION = ?, "
 			"CREATED_TS = ?, "
@@ -184,7 +201,7 @@ bool Dao::updateTask(const Task& task) {
 			"MESSAGE = ? "
 			"WHERE TASK_ID = ?;";
 
-	logger.trace << "Dao::insertJob statement: " << sqlStr << "\n";
+	logger.trace << "Dao::insertTask statement: " << sqlStr << "\n";
 
     esl::database::PreparedStatement statement = dbConnection.prepare(sqlStr);
 
@@ -204,6 +221,7 @@ bool Dao::updateTask(const Task& task) {
 		checkedNumericConvert<int>(task.priority),
 		priorityTSDuration,
 		toString(task.settings),
+		toString(task.metrics),
 		signals,
 		task.condition,
 		lastCreatedTSDuration,
@@ -219,7 +237,7 @@ bool Dao::updateTask(const Task& task) {
     return true;
 }
 
-std::vector<Dao::Task> Dao::loadTasks(const common::types::State::Type& state) {
+std::vector<Dao::Task> Dao::loadTasks(const common::types::State::Type& state, const std::chrono::system_clock::time_point& eventNotAfterTS, const std::chrono::system_clock::time_point& eventNotBeforeTS) {
     std::vector<Task> results;
 
 	static const std::string sqlStr = "SELECT "
@@ -229,6 +247,7 @@ std::vector<Dao::Task> Dao::loadTasks(const common::types::State::Type& state) {
 			"PRIORITY_TS, "
 			"EVENT_TYPE, "
 			"SETTINGS, "
+			"METRICS, "
 			"SIGNALS, "
 			"CONDITION, "
 			"CREATED_TS, "
@@ -238,10 +257,12 @@ std::vector<Dao::Task> Dao::loadTasks(const common::types::State::Type& state) {
 			"RETURN_CODE, "
 			"MESSAGE "
 			"FROM TASKS "
-			"WHERE STATE = ?;";
+			"WHERE STATE = ? AND CREATED_TS >= ? AND CREATED_TS <= ?;";
     esl::database::PreparedStatement statement = dbConnection.prepare(sqlStr);
+    std::int64_t eventNotAfter = std::chrono::time_point_cast<std::chrono::milliseconds>(eventNotAfterTS).time_since_epoch().count();
+    std::int64_t eventNotBefore = std::chrono::time_point_cast<std::chrono::milliseconds>(eventNotBeforeTS).time_since_epoch().count();
 
-    for(esl::database::ResultSet resultSet = statement.execute(common::types::State::toString(state)); resultSet; resultSet.next()) {
+    for(esl::database::ResultSet resultSet = statement.execute(common::types::State::toString(state), eventNotBefore, eventNotAfter); resultSet; resultSet.next()) {
     	Task task;
 
     	task.taskId = resultSet[0].isNull() ? "" : resultSet[0].asString();
@@ -250,23 +271,25 @@ std::vector<Dao::Task> Dao::loadTasks(const common::types::State::Type& state) {
     	if(!resultSet[3].isNull()) {
     	    task.priorityTS = std::chrono::time_point<std::chrono::system_clock>(std::chrono::milliseconds(resultSet[3].asInteger()));
     	}
+    	task.effectivePriority = calculatedEffectivePriority(task.priority, task.priorityTS);
     	task.eventType = resultSet[4].isNull() ? "" : resultSet[4].asString();
     	task.settings = toSettings(resultSet[5].isNull() ? "" : resultSet[5].asString());
-    	if(!resultSet[6].isNull()) {
-    		task.signals = esl::utility::String::split(resultSet[6].asString(), ',', true);
+    	task.metrics = toSettings(resultSet[6].isNull() ? "" : resultSet[6].asString());
+    	if(!resultSet[7].isNull()) {
+    		task.signals = esl::utility::String::split(resultSet[7].asString(), ',', true);
     	}
-    	task.condition = resultSet[7].isNull() ? "" : resultSet[7].asString();
-    	if(!resultSet[8].isNull()) {
-    	    task.createdTS = std::chrono::time_point<std::chrono::system_clock>(std::chrono::milliseconds(resultSet[8].asInteger()));
+    	task.condition = resultSet[8].isNull() ? "" : resultSet[8].asString();
+    	if(!resultSet[9].isNull()) {
+    	    task.createdTS = std::chrono::time_point<std::chrono::system_clock>(std::chrono::milliseconds(resultSet[9].asInteger()));
     	}
-    	task.startTS = toTimepoint(resultSet[9].isNull() ? "" : resultSet[9].asString());
-    	task.endTS = toTimepoint(resultSet[10].isNull() ? "" : resultSet[10].asString());
-    	if(!resultSet[11].isNull()) {
-    	    task.lastHeartbeatTS = std::chrono::time_point<std::chrono::system_clock>(std::chrono::milliseconds(resultSet[11].asInteger()));
+    	task.startTS = toTimepoint(resultSet[10].isNull() ? "" : resultSet[10].asString());
+    	task.endTS = toTimepoint(resultSet[11].isNull() ? "" : resultSet[11].asString());
+    	if(!resultSet[12].isNull()) {
+    	    task.lastHeartbeatTS = std::chrono::time_point<std::chrono::system_clock>(std::chrono::milliseconds(resultSet[12].asInteger()));
     	}
     	task.state = state;
-    	task.returnCode = resultSet[12].isNull() ? 0 : resultSet[12].asInteger();
-    	task.message = resultSet[13].isNull() ? "" : resultSet[13].asString();
+    	task.returnCode = resultSet[13].isNull() ? 0 : resultSet[13].asInteger();
+    	task.message = resultSet[14].isNull() ? "" : resultSet[14].asString();
 
         results.push_back(task);
     }
@@ -285,6 +308,7 @@ std::unique_ptr<Dao::Task> Dao::loadTaskByTaskId(const std::string& taskId) {
 			"PRIORITY_TS, "
 			"EVENT_TYPE, "
 			"SETTINGS, "
+			"METRICS, "
 			"SIGNALS, "
 			"CONDITION, "
 			"CREATED_TS, "
@@ -309,28 +333,30 @@ std::unique_ptr<Dao::Task> Dao::loadTaskByTaskId(const std::string& taskId) {
     	if(!resultSet[2].isNull()) {
     	    task->priorityTS = std::chrono::time_point<std::chrono::system_clock>(std::chrono::milliseconds(resultSet[2].asInteger()));
     	}
+    	task->effectivePriority = calculatedEffectivePriority(task->priority, task->priorityTS);
     	task->eventType = resultSet[3].isNull() ? "" : resultSet[3].asString();
     	task->settings = toSettings(resultSet[4].isNull() ? "" : resultSet[4].asString());
-    	if(!resultSet[5].isNull()) {
-    		task->signals = esl::utility::String::split(resultSet[5].asString(), ',', true);
+    	task->metrics = toSettings(resultSet[5].isNull() ? "" : resultSet[5].asString());
+    	if(!resultSet[6].isNull()) {
+    		task->signals = esl::utility::String::split(resultSet[6].asString(), ',', true);
     	}
-    	task->condition = resultSet[6].isNull() ? "" : resultSet[6].asString();
-    	if(!resultSet[7].isNull()) {
-    		task->createdTS = std::chrono::time_point<std::chrono::system_clock>(std::chrono::milliseconds(resultSet[7].asInteger()));
+    	task->condition = resultSet[7].isNull() ? "" : resultSet[7].asString();
+    	if(!resultSet[8].isNull()) {
+    		task->createdTS = std::chrono::time_point<std::chrono::system_clock>(std::chrono::milliseconds(resultSet[8].asInteger()));
     	}
-    	task->startTS = toTimepoint(resultSet[8].isNull() ? "" : resultSet[8].asString());
-    	task->endTS = toTimepoint(resultSet[9].isNull() ? "" : resultSet[9].asString());
-    	if(!resultSet[10].isNull()) {
-    	    task->lastHeartbeatTS = std::chrono::time_point<std::chrono::system_clock>(std::chrono::milliseconds(resultSet[10].asInteger()));
+    	task->startTS = toTimepoint(resultSet[9].isNull() ? "" : resultSet[9].asString());
+    	task->endTS = toTimepoint(resultSet[10].isNull() ? "" : resultSet[10].asString());
+    	if(!resultSet[11].isNull()) {
+    	    task->lastHeartbeatTS = std::chrono::time_point<std::chrono::system_clock>(std::chrono::milliseconds(resultSet[11].asInteger()));
     	}
-    	task->state = resultSet[11].isNull() ? common::types::State::zombie : common::types::State::toState(resultSet[11].asString());
-    	task->returnCode = resultSet[12].isNull() ? 0 : resultSet[12].asInteger();
-    	task->message = resultSet[13].isNull() ? "" : resultSet[13].asString();
+    	task->state = resultSet[12].isNull() ? common::types::State::zombie : common::types::State::toState(resultSet[12].asString());
+    	task->returnCode = resultSet[13].isNull() ? 0 : resultSet[13].asInteger();
+    	task->message = resultSet[14].isNull() ? "" : resultSet[14].asString();
     }
 	return task;
 }
 
-std::unique_ptr<Dao::Task> Dao::loadLatesQueuedOrRunningTaskByCrc32(const std::string& eventType, std::uint32_t crc32) {
+std::unique_ptr<Dao::Task> Dao::loadLatesTaskByEventTypeAndCrc32(const std::string& eventType, std::uint32_t crc32) {
     std::unique_ptr<Task> task;
 
 	static const std::string sqlStr = "SELECT "
@@ -339,6 +365,7 @@ std::unique_ptr<Dao::Task> Dao::loadLatesQueuedOrRunningTaskByCrc32(const std::s
 			"PRIORITY, "
 			"PRIORITY_TS, "
 			"SETTINGS, "
+			"METRICS, "
 			"SIGNALS, "
 			"CONDITION, "
 			"CREATED_TS, "
@@ -351,20 +378,15 @@ std::unique_ptr<Dao::Task> Dao::loadLatesQueuedOrRunningTaskByCrc32(const std::s
 			"WHERE EVENT_TYPE = ? AND CRC32 = ?;";
     esl::database::PreparedStatement statement = dbConnection.prepare(sqlStr);
 
-//	checkedNumericConvert<std::int64_t>(task.crc32),
-
     for(esl::database::ResultSet resultSet = statement.execute(eventType, checkedNumericConvert<std::int64_t>(crc32)); resultSet; resultSet.next()) {
     	std::chrono::system_clock::time_point createdTS;
+    	if(!resultSet[8].isNull()) {
+    		createdTS = std::chrono::time_point<std::chrono::system_clock>(std::chrono::milliseconds(resultSet[8].asInteger()));
+    	}
 
-    	if(!resultSet[7].isNull()) {
-    		createdTS = std::chrono::time_point<std::chrono::system_clock>(std::chrono::milliseconds(resultSet[7].asInteger()));
-    		if(task && task->createdTS > createdTS) {
-    			continue;
-    		}
-    	}
-    	else if(task) {
-    		continue;
-    	}
+		if(task && task->createdTS > createdTS) {
+			continue;
+		}
 
     	task.reset(new Task);
     	task->eventType = eventType;
@@ -376,21 +398,81 @@ std::unique_ptr<Dao::Task> Dao::loadLatesQueuedOrRunningTaskByCrc32(const std::s
     	if(!resultSet[3].isNull()) {
     	    task->priorityTS = std::chrono::time_point<std::chrono::system_clock>(std::chrono::milliseconds(resultSet[3].asInteger()));
     	}
+    	task->effectivePriority = calculatedEffectivePriority(task->priority, task->priorityTS);
     	task->settings = toSettings(resultSet[4].isNull() ? "" : resultSet[4].asString());
-    	if(!resultSet[5].isNull()) {
-    		task->signals = esl::utility::String::split(resultSet[5].asString(), ',', true);
+    	task->metrics = toSettings(resultSet[5].isNull() ? "" : resultSet[5].asString());
+    	if(!resultSet[6].isNull()) {
+    		task->signals = esl::utility::String::split(resultSet[6].asString(), ',', true);
     	}
-    	task->condition = resultSet[6].isNull() ? "" : resultSet[6].asString();
+    	task->condition = resultSet[7].isNull() ? "" : resultSet[7].asString();
 	    task->createdTS = createdTS;
-    	task->startTS = toTimepoint(resultSet[8].isNull() ? "" : resultSet[8].asString());
-    	task->endTS = toTimepoint(resultSet[9].isNull() ? "" : resultSet[9].asString());
-    	if(!resultSet[10].isNull()) {
-    	    task->lastHeartbeatTS = std::chrono::time_point<std::chrono::system_clock>(std::chrono::milliseconds(resultSet[10].asInteger()));
+    	task->startTS = toTimepoint(resultSet[9].isNull() ? "" : resultSet[9].asString());
+    	task->endTS = toTimepoint(resultSet[10].isNull() ? "" : resultSet[10].asString());
+    	if(!resultSet[11].isNull()) {
+    	    task->lastHeartbeatTS = std::chrono::time_point<std::chrono::system_clock>(std::chrono::milliseconds(resultSet[11].asInteger()));
     	}
-    	task->returnCode = resultSet[11].isNull() ? 0 : resultSet[11].asInteger();
-    	task->message = resultSet[12].isNull() ? "" : resultSet[12].asString();
+    	task->returnCode = resultSet[12].isNull() ? 0 : resultSet[12].asInteger();
+    	task->message = resultSet[13].isNull() ? "" : resultSet[13].asString();
     }
 	return task;
+}
+
+std::vector<Dao::Task> Dao::loadTasksByEventTypeAndState(const std::string& eventType, const common::types::State::Type& state) {
+    std::vector<Task> tasks;
+
+	static const std::string sqlStr = "SELECT "
+			"CRC32, "
+			"TASK_ID, "
+			"PRIORITY, "
+			"PRIORITY_TS, "
+			"SETTINGS, "
+			"METRICS, "
+			"SIGNALS, "
+			"CONDITION, "
+			"CREATED_TS, "
+			"BEGIN_TS, "
+			"END_TS, "
+			"LAST_HEARTBEAT_TS, "
+			"RETURN_CODE, "
+			"MESSAGE "
+			"FROM TASKS "
+			"WHERE EVENT_TYPE = ? AND STATE = ?;";
+    esl::database::PreparedStatement statement = dbConnection.prepare(sqlStr);
+
+    for(esl::database::ResultSet resultSet = statement.execute(eventType, common::types::State::toString(common::types::State::queued)); resultSet; resultSet.next()) {
+    	Task task;
+
+    	task.eventType = eventType;
+    	task.state = common::types::State::queued;
+    	task.crc32 = resultSet[0].isNull() ? 0 : resultSet[0].asInteger();
+    	task.taskId = resultSet[1].isNull() ? "" : resultSet[1].asString();
+    	task.priority = resultSet[2].isNull() ? 0 : resultSet[2].asInteger();
+    	if(!resultSet[3].isNull()) {
+    	    task.priorityTS = std::chrono::time_point<std::chrono::system_clock>(std::chrono::milliseconds(resultSet[3].asInteger()));
+    	}
+    	task.effectivePriority = calculatedEffectivePriority(task.priority, task.priorityTS);
+
+    	task.settings = toSettings(resultSet[4].isNull() ? "" : resultSet[4].asString());
+    	task.metrics = toSettings(resultSet[5].isNull() ? "" : resultSet[5].asString());
+    	if(!resultSet[6].isNull()) {
+    		task.signals = esl::utility::String::split(resultSet[6].asString(), ',', true);
+    	}
+    	task.condition = resultSet[7].isNull() ? "" : resultSet[7].asString();
+    	if(!resultSet[8].isNull()) {
+    		task.createdTS = std::chrono::time_point<std::chrono::system_clock>(std::chrono::milliseconds(resultSet[8].asInteger()));
+    	}
+    	task.startTS = toTimepoint(resultSet[9].isNull() ? "" : resultSet[9].asString());
+    	task.endTS = toTimepoint(resultSet[10].isNull() ? "" : resultSet[10].asString());
+    	if(!resultSet[11].isNull()) {
+    	    task.lastHeartbeatTS = std::chrono::time_point<std::chrono::system_clock>(std::chrono::milliseconds(resultSet[11].asInteger()));
+    	}
+    	task.returnCode = resultSet[12].isNull() ? 0 : resultSet[12].asInteger();
+    	task.message = resultSet[13].isNull() ? "" : resultSet[13].asString();
+
+    	tasks.push_back(task);
+    }
+
+    return tasks;
 }
 
 } /* namespace head */

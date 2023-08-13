@@ -28,7 +28,9 @@ public:
 		std::string eventType;
 		unsigned int priority = 0;
 		std::chrono::system_clock::time_point priorityTS;
+		unsigned int effectivePriority = 0;
 		std::vector<service::schemas::Setting> settings;
+		std::vector<service::schemas::Setting> metrics;
 		std::vector<std::string> signals;
 		std::string condition;
 
@@ -48,9 +50,10 @@ public:
 	bool insertTask(const Task& task);
 	bool updateTask(const Task& task);
 
-	std::vector<Task> loadTasks(const common::types::State::Type& state);
+	std::vector<Task> loadTasks(const common::types::State::Type& state, const std::chrono::system_clock::time_point& eventNotAfter, const std::chrono::system_clock::time_point& eventNotBefore);
 	std::unique_ptr<Task> loadTaskByTaskId(const std::string& taskId);
-	std::unique_ptr<Task> loadLatesQueuedOrRunningTaskByCrc32(const std::string& eventType, std::uint32_t crc32);
+	std::unique_ptr<Task> loadLatesTaskByEventTypeAndCrc32(const std::string& eventType, std::uint32_t crc32);
+	std::vector<Task> loadTasksByEventTypeAndState(const std::string& eventType, const common::types::State::Type& state);
 
 	esl::database::Connection& dbConnection;
 	const bool isSQLite;

@@ -4,8 +4,7 @@
 #include <batchelor/service/Service.h>
 #include <batchelor/service/schemas/FetchRequest.h>
 #include <batchelor/service/schemas/FetchResponse.h>
-#include <batchelor/service/schemas/JobStatusHead.h>
-#include <batchelor/service/schemas/JobStatusWorker.h>
+#include <batchelor/service/schemas/TaskStatusHead.h>
 #include <batchelor/service/schemas/RunRequest.h>
 #include <batchelor/service/schemas/RunResponse.h>
 #include <batchelor/service/schemas/Signal.h>
@@ -28,10 +27,10 @@ public:
 	schemas::FetchResponse fetchTask(const schemas::FetchRequest& fetchRequest) override;
 
 	// used by controller-cli
-	std::vector<schemas::JobStatusHead> getTasks(const std::string& state, const std::string& eventNotAfter, const std::string& eventNotBefore) override;
+	std::vector<schemas::TaskStatusHead> getTasks(const std::string& state, const std::string& eventNotAfter, const std::string& eventNotBefore) override;
 
 	// used by controller-cli
-	std::unique_ptr<schemas::JobStatusHead> getTask(const std::string& jobId) override;
+	std::unique_ptr<schemas::TaskStatusHead> getTask(const std::string& taskId) override;
 
 	// used by controller-cli
 	schemas::RunResponse runTask(const schemas::RunRequest& runRequest) override;

@@ -13,23 +13,26 @@ namespace service {
 namespace schemas {
 
 struct RunConfiguration {
-	std::string jobId;
+	std::string taskId;
 	std::string eventType;
 
 	/* contains event type specific settings, like
 	 * - arguments,
 	 * - environment variables,
-	 * - working dir, ...
+	 * - working dir,
+	 * - executable, ...
 	 * e.g.:
-	 * - settings[0] = { 'env' ; 'DISPLAY=0' }
-	 * - settings[1] = { 'env' ; 'TMP_DIR=/tmp' }
-	 * - settings[2] = { 'args' ; '--propertyId=Bla --propertyFile=/wxx/secret/property.cfg' }
+	 * - settings[0] = { 'args' ; '--propertyId=Bla --propertyFile=/wxx/secret/property.cfg' }
+	 * - settings[1] = { 'env' ; 'DISPLAY=0' }
+	 * - settings[2] = { 'env' ; 'TMP_DIR=/tmp' }
+	 * - settings[3] = { 'cd' ; '/wxx/app/rose/log' }
+	 * - settings[4] = { 'cmd' ; '/opt/bin/bestoptxl-calculation' }
 	 */
 	std::vector<Setting> settings;
 };
 
 SERGUT_FUNCTION(RunConfiguration, data, ar) {
-    ar & SERGUT_MMEMBER(data, jobId)
+    ar & SERGUT_MMEMBER(data, taskId)
        & SERGUT_MMEMBER(data, eventType)
        & SERGUT_NESTED_MMEMBER(data, settings, settings);
 }

@@ -1,5 +1,7 @@
+#include <batchelor/common/types/State.h>
+
 #include <batchelor/worker/Logger.h>
-#include <batchelor/worker/ProcessExec.h>
+#include <batchelor/worker/TaskExec.h>
 
 #include <batchelor/service/schemas/Setting.h>
 
@@ -8,22 +10,25 @@
 
 #include <boost/filesystem.hpp>
 
+#include <mutex>
 #include <stdexcept>
-
 
 namespace batchelor {
 namespace worker {
 namespace {
-Logger logger("batchelor::worker::ProcessExec");
+Logger logger("batchelor::worker::TaskExec");
 }
 
-ProcessExec::ProcessExec(ProcessExecFactory& aProcessExecFactory, Procedure& aProcedure, const std::vector<std::pair<std::string, std::string>>& settings, const std::string& executable, const std::string& aWorkingDirectory)
-: processExecFactory(aProcessExecFactory),
-  procedure(aProcedure),
+TaskExec::TaskExec(TaskFactoryExec& aTaskFactoryExec, std::condition_variable& aNotifyCV, std::mutex& notifyMutex, const std::vector<std::pair<std::string, std::string>>& settings, const std::string& aExecutable, const std::string& aWorkingDirectory)
+: taskFactoryExec(aTaskFactoryExec),
+  notifyCV(aNotifyCV),
+  taskStatusMutex(notifyMutex),
+  executable(aExecutable),
   workingDirectory(aWorkingDirectory)
 {
 	std::vector<std::string> args;
 	std::vector<std::pair<std::string, std::string>> envs;
+	taskStatus.state = common::types::State::Type::running;
 
 	args.push_back(executable);
 
@@ -67,66 +72,53 @@ ProcessExec::ProcessExec(ProcessExecFactory& aProcessExecFactory, Procedure& aPr
 	(*process)[esl::system::FileDescriptor::getOut()] >> boost::filesystem::path(workingDirectory + "/out.log");
 	(*process)[esl::system::FileDescriptor::getErr()] >> boost::filesystem::path(workingDirectory + "/err.log");
 
-	std::thread thread(&ProcessExec::run, this);
+	thread = std::thread(&TaskExec::run, this);
 }
 
-ProcessExec::~ProcessExec() {
+TaskExec::~TaskExec() {
 	thread.join();
-	processExecFactory.releaseProcess();
+	taskFactoryExec.releaseProcess();
 }
 
-common::types::State::Type ProcessExec::getState() const {
-	return state;
+TaskStatus TaskExec::getTaskStatus() const {
+	return taskStatus;
 }
 
-int ProcessExec::getRC() const {
-	return returnCode;
-}
-
-std::string ProcessExec::getMessage() const {
-	return message;
-}
-
-void ProcessExec::sendSignal(const esl::utility::Signal& signal) {
+void TaskExec::sendSignal(const esl::utility::Signal& signal) {
 	process->sendSignal(signal);
 }
 
-void ProcessExec::run() {
+void TaskExec::run() {
 	try {
 		logger.debug << "execute ...\n";
+		auto returnCode = process->execute(arguments);
 
 		{
-			std::lock_guard<std::mutex> lockGuard(procedure.getMutex());
-			state = common::types::State::Type::running;
-		}
-
-		returnCode = process->execute(arguments);
-
-		{
-			std::lock_guard<std::mutex> lockGuard(procedure.getMutex());
-			state = common::types::State::Type::done;
+			std::lock_guard<std::mutex> taskStatusLock(taskStatusMutex);
+			taskStatus.state = common::types::State::Type::done;
+			taskStatus.returnCode = returnCode;
 		}
 
 		logger.debug << "execution done, rc=" << returnCode << "\n";
 	}
 	catch(const std::exception& e) {
-		std::lock_guard<std::mutex> lockGuard(procedure.getMutex());
+		std::lock_guard<std::mutex> taskStatusLock(taskStatusMutex);
 
-		state = common::types::State::Type::signaled;
-		message = e.what();
+		taskStatus.state = common::types::State::Type::signaled;
+		taskStatus.message = e.what();
 
 		logger.warn << "Execution failed because of exception: \"" << e.what() << "\"\n";
 	}
 	catch(...) {
-		std::lock_guard<std::mutex> lockGuard(procedure.getMutex());
+		std::lock_guard<std::mutex> taskStatusLock(taskStatusMutex);
 
-		state = common::types::State::Type::signaled;
-		message = "Execution failed because of unknown exception.";
+		taskStatus.state = common::types::State::Type::signaled;
+		taskStatus.message = "Execution failed because of unknown exception.";
 
 		logger.warn << "Execution failed because of unknown exception.\n";
 	}
 
-	procedure.signalEvent();
+	notifyCV.notify_all();
 }
 
 } /* namespace worker */

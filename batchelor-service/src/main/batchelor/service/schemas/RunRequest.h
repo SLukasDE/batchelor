@@ -26,21 +26,21 @@ struct RunRequest {
 	 */
 	std::vector<Setting> settings;
 
-	/* First this job will go into a queue and it's state is waiting.
-	 * Every time a worker is calling fetchJob, this formula will be evaluated if job is still in state waiting and if worker is offering this eventType.
+	/* First this task will go into a queue and it's state is waiting.
+	 * Every time a worker is calling fetchTask, this formula will be evaluated if task is still in state waiting and if worker is offering this eventType.
 	 * Available variables to get used in the formula are all variables delivered as metrics of "fetch-request" like
-	 * - cpu usage              (CPU_USAGE),
-	 * - memory usage           (MEM_USAGE),
-	 * - number of jobs running (RUNNING_JOBS),
-	 * - host name              (HOST_NAME),
+	 * - cpu usage               (CPU_USAGE),
+	 * - memory usage            (MEM_USAGE),
+	 * - number of running tasks (TASKS_RUNNING),
+	 * - host name               (HOST_NAME),
 	 * - cloudId,
 	 * - workerId
 	 * - ...
-	 * as well as job specific variables provided by the head server, like
+	 * as well as task specific variables provided by the head server, like
 	 * - waiting time,
 	 * - priority,
 	 * - ...
-	 * If the formula is evaluated to true, head will response to worker to run this job.
+	 * If the formula is evaluated to true, head will response to worker to run this task.
 	 */
 	std::string condition;
 };

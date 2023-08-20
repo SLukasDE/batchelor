@@ -36,6 +36,9 @@ public:
 	void setWait();
 	bool getWait() const noexcept;
 
+	void setWaitCancel(const char* maxTries);
+	int getWaitCancel() const noexcept;
+
 	void setTaskId(const char* taskId);
 	const std::string& getTaskId() const noexcept;
 
@@ -66,6 +69,7 @@ private:
 	std::vector<std::pair<std::string, std::string>> settings;
 	std::string condition;
 	bool wait = false;
+	int waitCancel = -2;
 	std::string taskId;
 	std::string signal;
 	std::unique_ptr<common::types::State::Type> state;

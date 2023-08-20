@@ -3,6 +3,7 @@
 #include <batchelor/worker/Logger.h>
 #include <batchelor/worker/Main.h>
 #include <batchelor/worker/Options.h>
+#include <batchelor/worker/Plugin.h>
 
 #include <esl/logging/Logging.h>
 #include <esl/plugin/Registry.h>
@@ -26,6 +27,7 @@ int main(int argc, const char* argv[]) {
 		Options options(argc, argv);
 
 		eslx::Plugin::install(esl::plugin::Registry::get(), nullptr);
+		batchelor::worker::Plugin::install(esl::plugin::Registry::get(), nullptr);
 	    esl::system::Stacktrace::init("eslx/system/Stacktrace", {});
 		esl::logging::Logging::initWithFile("logger.xml");
 

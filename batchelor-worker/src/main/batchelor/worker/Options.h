@@ -30,7 +30,9 @@ public:
 	void setWait();
 	bool getWait() const noexcept;
 
-	void addConnectionFile(const char* value);
+	void addConfigFile(const char* value);
+	std::vector<std::string> getConfigFiles() const noexcept;
+
 	void setUsername(const char* value);
 	void setPassword(const char* value);
 	void addURL(const char* value);
@@ -43,7 +45,9 @@ private:
 	std::vector<std::pair<std::string, std::string>> settings;
 	std::string condition;
 	bool wait = false;
-	std::size_t maximumTasksRunning = 0;
+	std::size_t maximumTasksRunning = std::string::npos;
+
+	std::vector<std::string> configFiles;
 
 	// connection options
 	std::string currentUsername;

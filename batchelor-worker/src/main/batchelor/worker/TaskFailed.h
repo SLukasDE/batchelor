@@ -1,23 +1,23 @@
 #ifndef BATCHELOR_WORKER_TASKFAILED_H_
 #define BATCHELOR_WORKER_TASKFAILED_H_
 
-#include <batchelor/worker/TaskStatus.h>
-#include <batchelor/worker/Task.h>
+#include <batchelor/worker/plugin/Task.h>
 
-#include <esl/utility/Signal.h>
+#include <string>
 
 namespace batchelor {
 namespace worker {
 
-class TaskFailed : public Task {
+class TaskFailed : public plugin::Task {
 public:
-	TaskFailed(TaskStatus taskStatus);
 
-	TaskStatus getTaskStatus() const override;
-	void sendSignal(const esl::utility::Signal& signal) override;
+	TaskFailed(plugin::Task::Status status);
+
+	plugin::Task::Status getStatus() const override;
+	void sendSignal(const std::string& signal) override;
 
 private:
-	TaskStatus taskStatus;
+	plugin::Task::Status status;
 };
 
 } /* namespace worker */

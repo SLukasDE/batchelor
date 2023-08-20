@@ -161,8 +161,6 @@ Service::Service(const esl::object::Context& aContext, esl::database::Connection
 
 service::schemas::FetchResponse Service::fetchTask(const service::schemas::FetchRequest& fetchRequest) {
 	logger.trace << "fetchTask\n";
-    // siegburger str schleumer
-	// 30.8., 31.8, 1.9.
 	service::schemas::FetchResponse rv;
 
 	for(const auto& taskStatus : fetchRequest.tasks) {
@@ -205,7 +203,7 @@ service::schemas::FetchResponse Service::fetchTask(const service::schemas::Fetch
 		}
 	}
 	std::sort(std::begin(tasks), std::end(tasks), [](const Dao::Task &a, const Dao::Task &b) {
-		return a.effectivePriority < b.effectivePriority || (a.effectivePriority == b.effectivePriority && a.createdTS > b.createdTS);
+		return a.effectivePriority > b.effectivePriority || (a.effectivePriority == b.effectivePriority && a.createdTS < b.createdTS);
 	});
 
 	std::vector<service::schemas::Setting> metrics = getMetrics(fetchRequest.metrics);

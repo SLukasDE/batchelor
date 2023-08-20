@@ -8,6 +8,8 @@
 #include <batchelor/service/schemas/RunResponse.h>
 #include <batchelor/service/schemas/TaskStatusHead.h>
 
+#include <zsystem4esl/system/signal/Signal.h>
+
 #include <esl/system/Stacktrace.h>
 
 #include <stdexcept>
@@ -16,57 +18,6 @@ namespace batchelor {
 namespace control {
 namespace {
 Logger logger("batchelor::control::Main");
-}
-
-Main::Main(const Options& aOptions)
-: options(aOptions),
-  url("http://localhost:8080")
-{
-	switch(options.getCommand()) {
-	case Command::help:
-		Options::printUsage();
-		break;
-	case Command::sendEvent:
-		sendEvent();
-		break;
-	case Command::waitTask:
-		waitTask(options.getTaskId());
-		break;
-	case Command::signalTask:
-		signalTask();
-		break;
-	case Command::showTask:
-		showTask();
-		break;
-	case Command::showTasks:
-		showTasks();
-		break;
-	}
-}
-
-void Main::sendEvent() {
-	service::schemas::RunResponse runResponse;
-	{
-		auto httpConnection = createHTTPConnection();
-		service::client::Service client(*httpConnection);
-
-		service::schemas::RunRequest runRequest;
-		runRequest.eventType = options.getEventType();
-		runRequest.priority = options.getPriority() < 0 ? 0 : options.getPriority();
-		for(const auto& setting : options.getSettings()) {
-			runRequest.settings.push_back(service::schemas::Setting::make(setting.first, setting.second));
-		}
-		runRequest.condition = options.getCondition().empty() ? "${TRUE}" : options.getCondition();
-
-		runResponse = client.runTask(runRequest);
-		logger.info << "Task ID    : \"" << runResponse.taskId << "\"\n";
-	}
-
-	if(options.getWait()) {
-		logger.info << "-----------------\n";
-		waitTask(runResponse.taskId);
-	}
-}
 
 void printStatus(const service::schemas::TaskStatusHead& taskStatus) {
 	common::types::State::Type state = common::types::State::toState(taskStatus.state);
@@ -95,9 +46,81 @@ void printStatus(const service::schemas::TaskStatusHead& taskStatus) {
 		break;
 	}
 }
+}
+
+Main::Main(const Options& aOptions)
+: options(aOptions),
+  url("http://localhost:8080"),
+  signal(new zsystem4esl::system::signal::Signal({}))
+{
+	std::set<std::string> stopSignals{ {"interrupt"}, {"terminate"}, {"pipe"} };
+	for(auto stopSignal : stopSignals) {
+		signalHandles.push_back(signal->createHandler(esl::utility::Signal(stopSignal), [this]() {
+			stopRunning();
+		}));
+	}
+
+	switch(options.getCommand()) {
+	case Command::help:
+		Options::printUsage();
+		break;
+	case Command::sendEvent:
+		sendEvent();
+		break;
+	case Command::waitTask:
+		waitTask(options.getTaskId());
+		break;
+	case Command::cancelTask:
+		signalTask(options.getTaskId(), "CANCEL");
+		break;
+	case Command::signalTask:
+		signalTask(options.getTaskId(), options.getSignal());
+		break;
+	case Command::showTask:
+		showTask();
+		break;
+	case Command::showTasks:
+		showTasks();
+		break;
+	}
+}
+
+void Main::stopRunning() {
+	{
+		std::unique_lock<std::mutex> lockNotifyMutex(notifyMutex);
+		++signalsReceived;
+	}
+	notifyCV.notify_one();
+}
+
+void Main::sendEvent() {
+	service::schemas::RunResponse runResponse;
+	{
+		auto httpConnection = createHTTPConnection();
+		service::client::Service client(*httpConnection);
+
+		service::schemas::RunRequest runRequest;
+		runRequest.eventType = options.getEventType();
+		runRequest.priority = options.getPriority() < 0 ? 0 : options.getPriority();
+		for(const auto& setting : options.getSettings()) {
+			runRequest.settings.push_back(service::schemas::Setting::make(setting.first, setting.second));
+		}
+		runRequest.condition = options.getCondition().empty() ? "${TRUE}" : options.getCondition();
+
+		runResponse = client.runTask(runRequest);
+		logger.info << "Task ID    : \"" << runResponse.taskId << "\"\n";
+	}
+
+	if(options.getWait() || options.getWaitCancel() != -2) {
+		logger.info << "-----------------\n";
+		waitTask(runResponse.taskId);
+	}
+}
 
 void Main::waitTask(const std::string& taskId) {
+	std::unique_lock<std::mutex> lockNotifyMutex(notifyMutex);
 	service::schemas::TaskStatusHead oldTaskStatus;
+
 	{
 		auto httpConnection = createHTTPConnection();
 		service::client::Service client(*httpConnection);
@@ -122,7 +145,16 @@ void Main::waitTask(const std::string& taskId) {
 			}
 		}
 
-		std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+		//std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+		notifyCV.wait_for(lockNotifyMutex, std::chrono::milliseconds(5000));
+		if(options.getWaitCancel() != -2 && signalsReceived > signalsProcessed) {
+			++signalsProcessed;
+			signalTask(taskId, "CANCEL");
+		}
+		if((options.getWaitCancel() == -2 && signalsReceived > 0)
+		|| (options.getWaitCancel() >=  0 && signalsReceived > options.getWaitCancel())) {
+			break;
+		}
 
 		auto httpConnection = createHTTPConnection();
 		service::client::Service client(*httpConnection);
@@ -145,11 +177,11 @@ void Main::waitTask(const std::string& taskId) {
 	}
 }
 
-void Main::signalTask() {
+void Main::signalTask(const std::string& taskId, const std::string& signal) {
 	auto httpConnection = createHTTPConnection();
 	service::client::Service client(*httpConnection);
 
-	client.sendSignal(options.getTaskId(), options.getSignal());
+	client.sendSignal(taskId, signal);
 }
 
 void Main::showTask() {

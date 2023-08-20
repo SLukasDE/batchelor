@@ -7,9 +7,13 @@
 
 #include <esl/com/http/client/Connection.h>
 #include <esl/com/http/client/ConnectionFactory.h>
-
+#include <esl/system/Signal.h>
+#
+#include <condition_variable>
 #include <memory>
+#include <mutex>
 #include <string>
+#include <vector>
 
 namespace batchelor {
 namespace control {
@@ -18,9 +22,11 @@ class Main {
 public:
 	Main(const Options& options);
 
+	void stopRunning();
+
 	void sendEvent();
 	void waitTask(const std::string& taskId);
-	void signalTask();
+	void signalTask(const std::string& taskId, const std::string& signal);
 	void showTask();
 	void showTasks();
 
@@ -34,6 +40,13 @@ private:
 	std::string url;
 	std::unique_ptr<esl::com::http::client::ConnectionFactory> httpConnectionFactory;
 	int rc = 0;
+
+	std::condition_variable notifyCV;
+	std::mutex notifyMutex;
+	int signalsReceived = 0;
+	int signalsProcessed = 0;
+	std::unique_ptr<esl::system::Signal> signal;
+	std::vector<esl::system::Signal::Handler> signalHandles;
 };
 
 } /* namespace control */

@@ -15,6 +15,7 @@ namespace {
 static const std::string commandStrHelp = "help";
 static const std::string commandStrSendEvent = "send-event";
 static const std::string commandStrWaitTask = "wait-task";
+static const std::string commandStrCancelTask = "cancel-task";
 static const std::string commandStrSignalTask = "signal-task";
 static const std::string commandStrShowTask = "show-task";
 static const std::string commandStrShowTasks = "show-tasks";
@@ -27,6 +28,8 @@ const std::string& commandToStr(Command command) noexcept {
 		return commandStrSendEvent;
 	case Command::waitTask:
 		return commandStrWaitTask;
+	case Command::cancelTask:
+		return commandStrCancelTask;
 	case Command::signalTask:
 		return commandStrSignalTask;
 	case Command::showTask:
@@ -50,6 +53,9 @@ Command strToCommand(const std::string& commandStr) {
 	if(commandStr == commandStrWaitTask) {
 		return Command::waitTask;
 	}
+	if(commandStr == commandStrCancelTask) {
+		return Command::cancelTask;
+	}
 	if(commandStr == commandStrSignalTask) {
 		return Command::signalTask;
 	}
@@ -61,14 +67,7 @@ Command strToCommand(const std::string& commandStr) {
 	}
 	throw ArgumentsException("'" + commandStr + "' is no valid command.");
 }
-/*
-static const std::string stateStrWaiting = "waiting";
-static const std::string stateStrTimeout = "timeout";
-static const std::string stateStrRunning = "running";
-static const std::string stateStrDone = "done";
-static const std::string stateStrFailed = "failed";
-static const std::string stateStrZombi = "zombi";
-*/
+
 }
 
 Options::Options(int argc, const char* argv[]) {
@@ -96,6 +95,10 @@ Options::Options(int argc, const char* argv[]) {
 		}
 		else if(currentArg == "-w"  || currentArg == "--wait") {
 			setWait();
+		}
+		else if(currentArg == "-W"  || currentArg == "--wait-cancel") {
+			setWaitCancel(i+1 < argc ? argv[i+1] : nullptr);
+			++i;
 		}
 		else if(currentArg == "-t"  || currentArg == "--task-id") {
 			setTaskId(i+1 < argc ? argv[i+1] : nullptr);
@@ -152,6 +155,7 @@ Options::Options(int argc, const char* argv[]) {
 
 	switch(getCommand()) {
 	case Command::waitTask:
+	case Command::cancelTask:
 	case Command::signalTask:
 	case Command::showTask:
 		if(getTaskId().empty()) {
@@ -201,6 +205,7 @@ void Options::setCommand(const std::string& commandStr) {
 			throw ArgumentsException("Specification of command \"" + commandStr + "\" is not allowed together with option '--signal'.");
 		}
 		// @suppress("No break at end of case")
+	case Command::cancelTask:
 	case Command::signalTask:
 		if(!getEventType().empty()) {
 			throw ArgumentsException("Specification of command \"" + commandStr + "\" is not allowed together with option '--event-type'.");
@@ -346,6 +351,9 @@ void Options::setWait() {
 	if(wait) {
 		throw ArgumentsException("Multiple specification of option \"--wait\" is not allowed.");
 	}
+	if(waitCancel >= -1) {
+		throw ArgumentsException("Specification of option \"--wait\" is not allowed together with option \"--wait-cancel'.");
+	}
 
 	wait = true;
 
@@ -358,6 +366,31 @@ bool Options::getWait() const noexcept {
 	return wait;
 }
 
+void Options::setWaitCancel(const char* aMaxTries) {
+	if(waitCancel >= -1) {
+		throw ArgumentsException("Multiple specification of option \"--wait-cancel\" is not allowed.");
+	}
+	if(!aMaxTries) {
+		throw ArgumentsException("Value missing of option \"--wait-cancel\".");
+	}
+	if(wait) {
+		throw ArgumentsException("Specification of option \"--wait-cancel\" is not allowed together with option \"--wait'.");
+	}
+
+	waitCancel = std::stoi(aMaxTries);
+	if(waitCancel <= -2) {
+		throw ArgumentsException("Value " + std::to_string(waitCancel) + " is not allowed for option \"--wait-cancel\". Value must be -1 or greater.");
+	}
+
+	if(!command && *command != Command::sendEvent) {
+		throw ArgumentsException("Command \"" + commandToStr(*command) + "\" does not allow to use option \"--wait-cancel\".");
+	}
+}
+
+int Options::getWaitCancel() const noexcept {
+	return waitCancel;
+}
+
 void Options::setTaskId(const char* value) {
 	if(!taskId.empty()) {
 		throw ArgumentsException("Multiple specification of option \"--task-id\" is not allowed.");
@@ -368,7 +401,7 @@ void Options::setTaskId(const char* value) {
 
 	taskId = value;
 
-	if(!command && *command != Command::waitTask && *command != Command::signalTask && *command != Command::showTask) {
+	if(!command && *command != Command::waitTask && *command != Command::cancelTask && *command != Command::signalTask && *command != Command::showTask) {
 		throw ArgumentsException("Command \"" + commandToStr(*command) + "\" does not allow to use option \"--task-id\".");
 	}
 }
@@ -498,8 +531,8 @@ void Options::printUsage() {
 	std::cout << "\n";
 	std::cout << "Usage:\n";
 	std::cout << "  batchelor help\n";
-	std::cout << "  batchelor send-event   [CONNECTION OPTIONS] --event-type <event-type> [--priority <priority>] [--setting <key> <value>] [--condition <condition>] [--wait]\n";
-	std::cout << "  batchelor wait-task    [CONNECTION OPTIONS] --task-id <task-id>\n";
+	std::cout << "  batchelor send-event   [CONNECTION OPTIONS] --event-type <event-type> [--priority <priority>] [--setting <key> <value>] [--condition <condition>] [--wait | --wait-cancel <max-tries>]\n";
+	std::cout << "  batchelor wait-task    [CONNECTION OPTIONS] --task-id <task-id> [--wait-cancel <max-tries>]\n";
 	std::cout << "  batchelor cancel-task  [CONNECTION OPTIONS] --task-id <task-id>\n";
 	std::cout << "  batchelor signal-task  [CONNECTION OPTIONS] --task-id <task-id> --signal <signal>\n";
 	std::cout << "  batchelor show-task    [CONNECTION OPTIONS] --task-id <task-id>\n";
@@ -509,6 +542,7 @@ void Options::printUsage() {
 	std::cout << "  help         shows this help\n";
 	std::cout << "  send-event   adds a new event that will wait to get processed.\n";
 	std::cout << "  wait-task    Wait for new messages of the given task and return with exit code of this task.\n";
+	std::cout << "  cancel-task  This is equal to command 'signal-task' with option '--signal CANCEL'.\n";
 	std::cout << "  signal-task  Send a signal to the given task. It must be exactly one signal specified as name or number.\n";
 	std::cout << "  show-task    Shows all details of the given task.\n";
 	std::cout << "  show-tasks   Shows a list with some attributes of tasks that matches the given criteria.\n";
@@ -520,12 +554,15 @@ void Options::printUsage() {
 	std::cout << "  -s, --setting          <key> <value>    This option is allowed to be used multible times. The settings are specific to the event type.\n";
 	std::cout << "  -c, --condition        <condition>      Formula that specifies if a worker is allowed to process this event.\n";
 	std::cout << "  -w, --wait                              Wait for new messages and return with exit code of task.\n";
+	std::cout << "  -W, --wait-cancel      <max-tries>      Wait for new messages and return with exit code of task. A CANCEL signal will be send if an abort\n";
+	std::cout << "                                          signal is received, but control program does not abort until receiving this signal <max-tries> times.\n";
+	std::cout << "                                          If <max-tries> is set to -1 control program will never stop until task has been stopped.\n";
 	std::cout << "\n";
 	std::cout << "OPTIONS specific for command 'wait-task', 'cancel-task', 'signal-task', 'show-task':\n";
 	std::cout << "  -t, --task-id          <task-id>        Specifies the task that the command is related to.\n";
 	std::cout << "\n";
 	std::cout << "OPTIONS specific for command 'signal-task':\n";
-	std::cout << "  -C, --signal <signal>                   Specifies the signal that will be sent to the task. Signal \"CANCEL\" has a special meaning\n";
+	std::cout << "  -C, --signal           <signal>         Specifies the signal that will be sent to the task. Signal \"CANCEL\" has a special meaning\n";
 	std::cout << "                                          to cancel a task. If task is still waiting, it is removed from to wait for running.\n";
 	std::cout << "                                          If it is already running, it will result to send a special signal equal to Strg+C.\n";
 	std::cout << "                                          Other available values are numbers between 1-31 and between 34-64 of following constants:\n";

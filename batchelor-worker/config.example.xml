@@ -1,0 +1,40 @@
+<batchelor>
+    <plugin path="/opt/batchelor/plugin/execute.so"/>
+    <plugin path="/opt/batchelor/plugin/kubectl.so"/>
+    
+    <connection>
+        <setting key="url" value="https://127.0.0.1:8080"/>
+        <setting key="username" value="heinz"/>
+        <setting key="password" value="gaul"/>
+    </connection>
+    
+    <connection>
+        <setting key="url" value="https://127.0.0.1:8080"/>
+        <setting key="identity-provider" value="https://127.0.0.1:8080"/>
+        <setting key="client-secret" value="gaul"/>
+    </connection>
+    
+    <setting key="maximum-tasks-running" value="3"/>
+    
+    <user-defined-metric key="OS" value="zLinux"/>
+    <user-defined-metric key="CLOUD_ID" value="REWE-OnPrem|REWE-GCP"/>
+    
+    <event id="wurst" type="exec">
+        <setting key="metrics-policy" value="allow|deny"/>
+        <setting key="metric" value="TASK_ID"/>
+        <setting key="metric" value="CLOUD_ID"/>
+        
+        <setting key="maximum-tasks-running" value="3"/>
+        <setting key="args" value="--propertyId=Bla --propertyFile=/wxx/secret/property.cfg"/>
+        <setting key="args-flag" value="override|extend|fixed"/>
+        <setting key="env" value="JOBID=${TASK_ID}"/>
+        <setting key="env" value="TMP_DIR=/tmp"/>
+        <setting key="env-flag-global" value="override|extend"/>
+        <setting key="env-flag" value="override|extend|fixed"/>
+        <setting key="cd" value="/wxx/app/rose/log"/>
+        <setting key="cd-flag" value="override|fixed"/>
+        <setting key="cmd" value="/opt/bin/bestoptxl-calculation"/>
+        <setting key="cmd-flag" value="override|fixed"/>
+    </event>
+    
+</batchelor>

@@ -24,8 +24,8 @@ Options::Options(int argc, const char* argv[]) {
 		else if(currentArg == "-w"  || currentArg == "--wait") {
 			setWait();
 		}
-		else if(currentArg == "-f"  || currentArg == "--connection-file") {
-			addConnectionFile(i+1 < argc ? argv[i+1] : nullptr);
+		else if(currentArg == "-f"  || currentArg == "--config-file") {
+			addConfigFile(i+1 < argc ? argv[i+1] : nullptr);
 			++i;
 		}
 		else if(currentArg == "-U"  || currentArg == "--server-url") {
@@ -62,11 +62,11 @@ const std::string& Options::getCondition() const noexcept {
 }
 
 void Options::setMaximumTasksRunning(std::size_t aMaximumTasksRunning) {
-	if(maximumTasksRunning > 0) {
+	if(maximumTasksRunning != std::string::npos) {
 		throw ArgumentsException("Multiple specification of option \"--maximum-tasks-running\" is not allowed.");
 	}
-	if(aMaximumTasksRunning == 0) {
-		throw ArgumentsException("Value of option \"--maximum-tasks-running\" must be greater than 0.");
+	if(aMaximumTasksRunning == std::string::npos) {
+		throw ArgumentsException("Value of option \"--maximum-tasks-running\" must be equal or greater than 0, but lower than " + std::to_string(aMaximumTasksRunning) + ". Usage of '0' means unlimited.");
 	}
 
 	maximumTasksRunning = aMaximumTasksRunning;
@@ -116,10 +116,15 @@ const std::vector<std::pair<std::string, std::string>>& Options::getMetrics() co
 	return metrics;
 }
 
-void Options::addConnectionFile(const char* value) {
+void Options::addConfigFile(const char* value) {
 	if(!value) {
-		throw ArgumentsException("Value missing of option \"--connection-file\".");
+		throw ArgumentsException("Value missing of option \"--config-file\".");
 	}
+	configFiles.push_back(value);
+}
+
+std::vector<std::string> Options::getConfigFiles() const noexcept {
+	return configFiles;
 }
 
 void Options::setUsername(const char* value) {
@@ -163,10 +168,10 @@ void Options::printUsage() {
 	std::cout << "  -s, --setting          <key> <value>    This option is allowed to be used multible times. The settings are specific to the event type.\n";
 	std::cout << "  -c, --condition        <condition>      Formula that specifies if a worker is allowed to process this event.\n";
 	std::cout << "  -w, --wait                              Wait for new messages and return with exit code of task.\n";
+	std::cout << "  -f, --config-file      <file>           Config file can contain all connection parameters, provided event types and much more\n";
 	std::cout << "\n";
 	std::cout << "\n";
 	std::cout << "General CONNECTION OPTIONS:\n";
-	std::cout << "  -f, --connection-file  <file>           Connection file can contain all of the following connection options, but addition options are still allowed\n";
 	std::cout << "  -U, --server-url       <server-url>     At least one server-url must be specified\n";
 	std::cout << "  -u, --username         <username>       If <username> is specified, basic-auth is used\n";
 	std::cout << "  -p, --password         <password>       If <password> is specified, basic-auth is used\n";

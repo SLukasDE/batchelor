@@ -1,7 +1,8 @@
+#include <batchelor/worker/config/Config.h>
 #include <batchelor/worker/Logger.h>
 #include <batchelor/worker/Main.h>
+#include <batchelor/worker/plugin/Task.h>
 #include <batchelor/worker/TaskFailed.h>
-#include <batchelor/worker/TaskStatus.h>
 
 #include <batchelor/common/types/State.h>
 
@@ -10,14 +11,17 @@
 #include <batchelor/service/schemas/FetchResponse.h>
 #include <batchelor/service/schemas/TaskStatusWorker.h>
 
+#include <zsystem4esl/system/signal/Signal.h>
+
 #include <esl/com/http/client/exception/NetworkError.h>
 #include <esl/system/Stacktrace.h>
 #include <esl/utility/Signal.h>
 #include <esl/utility/String.h>
 
+#include <set>
 #include <stdexcept>
 
-#include <batchelor/worker/TaskFactoryExec.h>
+#include <iostream>
 namespace batchelor {
 namespace worker {
 
@@ -25,49 +29,75 @@ namespace {
 Logger logger("batchelor::worker::Main");
 }
 
-Main::Main(const Options& aOptions)
-: options(aOptions)
+Main::Main(const Options& options)
+: signal(new zsystem4esl::system::signal::Signal({}))
 {
 	url = "http://127.0.0.1:8080";
-	taskFactroyByEventType["wurst"] = TaskFactoryExec::create({ {{"cmd"},{"/bin/sleep"}} , {{"cd"},{"/tmp/wurst"}} });
+
+	userDefinedMetrics = options.getMetrics();
+	setMaximumTasksRunning(options.getMaximumTasksRunning());
+
+	for(const auto& configFile : options.getConfigFiles()) {
+		config::Config(*this, configFile);
+	}
+
+	std::set<std::string> stopSignals { {"interrupt"}, {"terminate"}, {"pipe"}};
+	for(auto stopSignal : stopSignals) {
+		signalHandles.push_back(signal->createHandler(esl::utility::Signal(stopSignal), [this]() {
+			stopRunning();
+		}));
+	}
 
 	run1();
-}
-
-Main::~Main() {
 }
 
 void Main::stopRunning() {
 	{
 		std::unique_lock<std::mutex> lockNotifyMutex(notifyMutex);
-
-		stopThread = true;
-		signalTasks(esl::utility::Signal("interrupt"));
-		signalTasks(esl::utility::Signal("terminate"));
-		signalTasks(esl::utility::Signal("pipe"));
-		auto waitUntilTimeout = std::chrono::steady_clock::now() + std::chrono::milliseconds(5000);
-		if(notifyCV.wait_until(lockNotifyMutex, waitUntilTimeout, [&]{
-			for(const auto& task : taskByTaskId) {
-				if(task.second->getTaskStatus().state == common::types::State::running) {
-					return false;
-				}
-			}
-			return true;
-		}) == false) {
-			signalTasks(esl::utility::Signal::Type::kill);
-		}
+		++signalsReceived;
 	}
 	notifyCV.notify_one();
 }
 
-int Main::getReturnCode() const {
+int Main::getReturnCode() const noexcept {
 	return rc;
 }
 
-void Main::signalTasks(const esl::utility::Signal& signal) {
+void Main::setMaximumTasksRunning(std::size_t aMaximumTasksRunning) {
+	maximumTasksRunning = aMaximumTasksRunning;
+}
+
+std::size_t Main::getMaximumTasksRunning() const noexcept {
+	return maximumTasksRunning;
+}
+
+void Main::addEventType(const std::string& id, std::unique_ptr<plugin::TaskFactory> eventType) {
+	if(taskFactroyByEventType.insert(std::make_pair(id, std::move(eventType))).second == false) {
+		throw std::runtime_error("Cannot add an event type with id \"" + id + "\" because there exists already an event type with same id.");
+	}
+}
+
+void Main::addUserDefinedMetric(const std::string& key, const std::string& value) {
+	userDefinedMetrics.emplace_back(key, value);
+}
+
+std::vector<std::pair<std::string, std::string>> Main::getCurrentMetrics() const {
+	return userDefinedMetrics;
+}
+
+std::vector<std::pair<std::string, std::string>> Main::getCurrentMetrics(const service::schemas::RunConfiguration& runConfiguration) const {
+	std::vector<std::pair<std::string, std::string>> rv = getCurrentMetrics();
+
+	rv.push_back(std::make_pair("TASK_ID", runConfiguration.taskId));
+	rv.push_back(std::make_pair("EVENT_TYPE", runConfiguration.eventType));
+
+	return rv;
+}
+
+void Main::signalTasks(const std::string& signal) {
 	for(const auto& task : taskByTaskId) {
-		if(task.second->getTaskStatus().state == common::types::State::running) {
-			task.second->sendSignal(esl::utility::Signal(signal));
+		if(task.second->getStatus().state == common::types::State::running) {
+			task.second->sendSignal(signal);
 		}
 	}
 }
@@ -80,10 +110,17 @@ void Main::run1() {
 		if(doWait) {
 			notifyCV.wait_for(lockNotifyMutex, std::chrono::milliseconds(5000));
 		}
-		if(stopThread) {
-			return;
+		if(signalsReceived > signalsProcessed) {
+			++signalsProcessed;
+			if(signalsReceivedMax == std::string::npos || signalsReceivedMax > signalsReceived) {
+				signalTasks("interrupt");
+				signalTasks("terminate");
+				signalTasks("pipe");
+			}
+			else {
+				signalTasks("kill");
+			}
 		}
-
 		try {
 			doWait = !run2();
 		}
@@ -98,6 +135,11 @@ void Main::run1() {
 		catch(...) {
 			logger.warn << "run2 function threw exception\n";
 			doWait = true;
+		}
+
+		//std::cerr << "someone set stopThread to " << stopThread << ", taskByTaskId.size() == " << taskByTaskId.size() << "\n";
+		if(signalsReceived > 0 && taskByTaskId.empty()) {
+			return;
 		}
 	}
 }
@@ -116,7 +158,7 @@ bool Main::run2() {
 		service::schemas::TaskStatusWorker taskStatusWorker;
 
 		taskStatusWorker.taskId = task.first;
-		auto taskStatus = task.second->getTaskStatus();
+		auto taskStatus = task.second->getStatus();
 		taskStatusWorker.state = common::types::State::toString(taskStatus.state);
 		taskStatusWorker.returnCode = taskStatus.returnCode;
 		taskStatusWorker.message = taskStatus.message;
@@ -127,24 +169,29 @@ bool Main::run2() {
 			++tasksRunning;
 		}
 		else {
+std::cout << "Task " << task.first << " finished with state \"" << taskStatusWorker.state << "\"\n";
 			notRunningTaskIDs.push_back(task.first);
 		}
 	}
 
 	/* prepare transmission of metrics */
-	for(const auto& metric : options.getMetrics()) {
+	std::vector<std::pair<std::string, std::string>> metrics = getCurrentMetrics();
+
+	for(const auto& metric : metrics) {
 		fetchRequest.metrics.push_back(service::schemas::Setting::make(metric.first, metric.second));
 	}
 	fetchRequest.metrics.push_back(service::schemas::Setting::make("TASKS_RUNNING", std::to_string(tasksRunning)));
 
 	/* prepare transmission the list of available event types and if they are available to create a new task */
-	for(const auto& taskFactory : taskFactroyByEventType) {
-		service::schemas::EventTypeAvailable eventTypeAvailable;
+	if(signalsReceived == 0) {
+		for(const auto& taskFactory : taskFactroyByEventType) {
+			service::schemas::EventTypeAvailable eventTypeAvailable;
 
-		eventTypeAvailable.eventType = taskFactory.first;
-		eventTypeAvailable.available = (options.getMaximumTasksRunning() == 0 || options.getMaximumTasksRunning() > tasksRunning) && !taskFactory.second->isBusy();
+			eventTypeAvailable.eventType = taskFactory.first;
+			eventTypeAvailable.available = (getMaximumTasksRunning() == 0 || getMaximumTasksRunning() > tasksRunning) && !taskFactory.second->isBusy();
 
-		fetchRequest.eventTypes.push_back(eventTypeAvailable);
+			fetchRequest.eventTypes.push_back(eventTypeAvailable);
+		}
 	}
 
 	service::schemas::FetchResponse fetchResponse = client.fetchTask(fetchRequest);
@@ -154,15 +201,9 @@ bool Main::run2() {
 		if(iter == taskByTaskId.end()) {
 			logger.warn << "Received a message to send a signal to an unknown task \"" << signal.taskId << "\"\n";
 		}
-		else if(iter->second->getTaskStatus().state == common::types::State::running) {
-			if(esl::utility::String::toUpper(signal.signal) == "CANCEL") {
-				iter->second->sendSignal(esl::utility::Signal("interrupt"));
-				iter->second->sendSignal(esl::utility::Signal("terminate"));
-				iter->second->sendSignal(esl::utility::Signal("pipe"));
-			}
-			else {
-				iter->second->sendSignal(esl::utility::Signal(signal.signal));
-			}
+		else if(iter->second->getStatus().state == common::types::State::running) {
+std::cout << "Signal \"" << signal.signal << "\" received for task " << signal.taskId << ".\n";
+			iter->second->sendSignal(signal.signal);
 			actionReceived = true;
 		}
 	}
@@ -185,16 +226,35 @@ bool Main::run2() {
 				settings.push_back(std::make_pair(setting.key, setting.value));
 			}
 
-			std::unique_ptr<Task> task = iter->second->createTask(notifyCV, notifyMutex, settings);
-			if(!task) {
-				TaskStatus taskStatus;
+			std::unique_ptr<plugin::Task> task;
+			try {
+				task = iter->second->createTask(notifyCV, notifyMutex, getCurrentMetrics(runConfiguration), runConfiguration);
+			}
+			catch(const std::exception& e) {
+std::cerr << "Could not create task " << runConfiguration.taskId << " for event type \"" << runConfiguration.eventType << "\" because exception occured with message \"" << e.what() << "\".\n";
+				plugin::Task::Status taskStatus;
 
-				taskStatus.state = common::types::State::Type::zombie;
+				taskStatus.state = common::types::State::Type::signaled;
+				taskStatus.returnCode = -1;
+				taskStatus.message = e.what();
+
+				task.reset(new TaskFailed(std::move(taskStatus)));
+			}
+			catch(...) { }
+
+			if(!task) {
+std::cerr << "Could not create task " << runConfiguration.taskId << " for event type \"" << runConfiguration.eventType << "\".\n";
+				plugin::Task::Status taskStatus;
+
+				taskStatus.state = common::types::State::Type::signaled;
 				taskStatus.returnCode = -1;
 				taskStatus.message = "creating task failed";
 
 				task.reset(new TaskFailed(std::move(taskStatus)));
 			}
+else {
+	std::cout << "Task " << runConfiguration.taskId << " created for event type \"" << runConfiguration.eventType << "\".\n";
+}
 
 			taskByTaskId.insert(std::make_pair(runConfiguration.taskId, std::move(task)));
 			actionReceived = true;

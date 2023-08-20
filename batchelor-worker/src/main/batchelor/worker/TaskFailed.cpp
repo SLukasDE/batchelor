@@ -5,15 +5,15 @@
 namespace batchelor {
 namespace worker {
 
-TaskFailed::TaskFailed(TaskStatus aTaskStatus)
-: taskStatus(std::move(aTaskStatus))
+TaskFailed::TaskFailed(plugin::Task::Status aStatus)
+: status(std::move(aStatus))
 { }
 
-TaskStatus TaskFailed::getTaskStatus() const {
-	return taskStatus;
+plugin::Task::Status TaskFailed::getStatus() const {
+	return status;
 }
 
-void TaskFailed::sendSignal(const esl::utility::Signal& signal) {
+void TaskFailed::sendSignal(const std::string& signal) {
 }
 
 } /* namespace worker */

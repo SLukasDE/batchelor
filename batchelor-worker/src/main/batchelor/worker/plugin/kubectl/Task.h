@@ -49,7 +49,6 @@ public:
 			std::string subPath; // this is the path of the volume entry in volue map
 			bool readOnly = true;
 		};
-		//std::string kubectl = "./kube/kubectl --kubeconfig ~/kube/dev-level-1.yaml";
 		std::string kubectlCmd = "./kube/kubectl";
 		std::string kubectlConfig = "./kube/dev-level-1.yaml";
 
@@ -77,17 +76,9 @@ public:
 	void sendSignal(const std::string& signal) override;
 
 private:
-	enum class PodState {
-		active, failed, signaled, succeeded, zombie
-	};
-	struct PodStatus {
-		PodState state = PodState::active;
-		std::string line;
-	};
-
 	std::string taskId;
 	std::string eventType;
-	bool taskCanceled = false;
+	mutable bool taskCanceled = false;
 
 	TaskFactory& taskFactory;
 
@@ -98,19 +89,16 @@ private:
 	std::vector<std::pair<std::string, std::string>> metrics;
 	Settings settings;
 
-	//std::unique_ptr<esl::system::Process> process;
-	//esl::system::Arguments arguments;
-
 	std::thread thread;
 
 	void run();
 
 	std::unique_ptr<esl::system::Process> getProcess() const;
 	std::string getCmd() const noexcept;
-	bool runBatch() const noexcept;
+	Status runBatch() const noexcept;
 	void sendCancel() const noexcept;
 	std::string getDeploymentYAML() const noexcept;
-	PodStatus getPodStatus();
+	Status getPodStatus();
 };
 
 } /* namespace kubectl */

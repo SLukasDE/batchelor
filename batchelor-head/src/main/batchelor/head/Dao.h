@@ -50,7 +50,7 @@ public:
 	bool insertTask(const Task& task);
 	bool updateTask(const Task& task);
 
-	std::vector<Task> loadTasks(const common::types::State::Type& state, const std::chrono::system_clock::time_point& eventNotAfter, const std::chrono::system_clock::time_point& eventNotBefore);
+	std::vector<Task> loadTasks(const std::string& state, const std::chrono::system_clock::time_point& eventNotAfter, const std::chrono::system_clock::time_point& eventNotBefore);
 	std::unique_ptr<Task> loadTaskByTaskId(const std::string& taskId);
 	std::unique_ptr<Task> loadLatesTaskByEventTypeAndCrc32(const std::string& eventType, std::uint32_t crc32);
 	std::vector<Task> loadTasksByEventTypeAndState(const std::string& eventType, const common::types::State::Type& state);

@@ -1,3 +1,5 @@
+#include <batchelor/common/Timestamp.h>
+
 #include <batchelor/head/Dao.h>
 #include <batchelor/head/Logger.h>
 
@@ -35,23 +37,6 @@ OType checkedNumericConvert(IType inputValue) {
         throw esl::system::Stacktrace::add(std::runtime_error("Numeric overflow in conversion"));
     }
     return static_cast<OType>(inputValue);
-}
-
-// ---------------------------------------------------------------------------------------------
-
-std::string toString(const std::chrono::system_clock::time_point& tp) {
-	return date::format("%F %T", tp);
-}
-
-std::chrono::system_clock::time_point toTimepoint(const std::string& tpStr) {
-	std::chrono::system_clock::time_point tp;
-
-	if(!tpStr.empty()) {
-		std::istringstream ss(tpStr);
-		date::from_stream(ss, "%F %T", tp);
-	}
-
-	return tp;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -172,8 +157,8 @@ bool Dao::insertTask(const Task& task) {
 		toString(task.metrics),
 		task.condition,
 		createdTSDuration,
-		toString(task.startTS),
-		toString(task.endTS),
+		common::Timestamp::toString(task.startTS),
+		common::Timestamp::toString(task.endTS),
 		createdTSDuration,
 		common::types::State::toString(task.state),
 		task.returnCode,
@@ -225,8 +210,8 @@ bool Dao::updateTask(const Task& task) {
 		signals,
 		task.condition,
 		lastCreatedTSDuration,
-		toString(task.startTS),
-		toString(task.endTS),
+		common::Timestamp::toString(task.startTS),
+		common::Timestamp::toString(task.endTS),
 		lastHeartbeatTSDuration,
 		common::types::State::toString(task.state),
 		task.returnCode,
@@ -237,10 +222,10 @@ bool Dao::updateTask(const Task& task) {
     return true;
 }
 
-std::vector<Dao::Task> Dao::loadTasks(const common::types::State::Type& state, const std::chrono::system_clock::time_point& eventNotAfterTS, const std::chrono::system_clock::time_point& eventNotBeforeTS) {
+std::vector<Dao::Task> Dao::loadTasks(const std::string& stateStr, const std::chrono::system_clock::time_point& eventNotAfterTS, const std::chrono::system_clock::time_point& eventNotBeforeTS) {
     std::vector<Task> results;
 
-	static const std::string sqlStr = "SELECT "
+	static const std::string sqlStrWithState = "SELECT "
 			"TASK_ID, "
 			"CRC32, "
 			"PRIORITY, "
@@ -257,12 +242,33 @@ std::vector<Dao::Task> Dao::loadTasks(const common::types::State::Type& state, c
 			"RETURN_CODE, "
 			"MESSAGE "
 			"FROM TASKS "
-			"WHERE STATE = ? AND CREATED_TS >= ? AND CREATED_TS <= ?;";
-    esl::database::PreparedStatement statement = dbConnection.prepare(sqlStr);
-    std::int64_t eventNotAfter = std::chrono::time_point_cast<std::chrono::milliseconds>(eventNotAfterTS).time_since_epoch().count();
-    std::int64_t eventNotBefore = std::chrono::time_point_cast<std::chrono::milliseconds>(eventNotBeforeTS).time_since_epoch().count();
+			"WHERE CREATED_TS >= ? AND CREATED_TS <= ? AND  STATE = ?;";
+	static const std::string sqlStrWithoutState = "SELECT "
+			"TASK_ID, "
+			"CRC32, "
+			"PRIORITY, "
+			"PRIORITY_TS, "
+			"EVENT_TYPE, "
+			"SETTINGS, "
+			"METRICS, "
+			"SIGNALS, "
+			"CONDITION, "
+			"CREATED_TS, "
+			"BEGIN_TS, "
+			"END_TS, "
+			"LAST_HEARTBEAT_TS, "
+			"RETURN_CODE, "
+			"MESSAGE, "
+			"STATE "
+			"FROM TASKS "
+			"WHERE CREATED_TS >= ? AND CREATED_TS <= ?;";
 
-    for(esl::database::ResultSet resultSet = statement.execute(common::types::State::toString(state), eventNotBefore, eventNotAfter); resultSet; resultSet.next()) {
+    std::int64_t eventNotBefore = eventNotAfterTS == std::chrono::system_clock::time_point() ? std::numeric_limits<std::int64_t>::lowest() : std::chrono::time_point_cast<std::chrono::milliseconds>(eventNotAfterTS).time_since_epoch().count();
+    std::int64_t eventNotAfter = eventNotBeforeTS == std::chrono::system_clock::time_point() ? std::numeric_limits<std::int64_t>::max() : std::chrono::time_point_cast<std::chrono::milliseconds>(eventNotBeforeTS).time_since_epoch().count();
+    common::types::State::Type state  = stateStr.empty() ? common::types::State::Type::done : common::types::State::toState(stateStr);
+
+	esl::database::PreparedStatement statement = dbConnection.prepare(stateStr.empty() ? sqlStrWithoutState : sqlStrWithState);
+	for(esl::database::ResultSet resultSet = stateStr.empty() ? statement.execute(eventNotBefore, eventNotAfter) : statement.execute(eventNotBefore, eventNotAfter, stateStr); resultSet; resultSet.next()) {
     	Task task;
 
     	task.taskId = resultSet[0].isNull() ? "" : resultSet[0].asString();
@@ -282,14 +288,14 @@ std::vector<Dao::Task> Dao::loadTasks(const common::types::State::Type& state, c
     	if(!resultSet[9].isNull()) {
     	    task.createdTS = std::chrono::time_point<std::chrono::system_clock>(std::chrono::milliseconds(resultSet[9].asInteger()));
     	}
-    	task.startTS = toTimepoint(resultSet[10].isNull() ? "" : resultSet[10].asString());
-    	task.endTS = toTimepoint(resultSet[11].isNull() ? "" : resultSet[11].asString());
+    	task.startTS = common::Timestamp::fromString(resultSet[10].isNull() ? "" : resultSet[10].asString());
+    	task.endTS = common::Timestamp::fromString(resultSet[11].isNull() ? "" : resultSet[11].asString());
     	if(!resultSet[12].isNull()) {
     	    task.lastHeartbeatTS = std::chrono::time_point<std::chrono::system_clock>(std::chrono::milliseconds(resultSet[12].asInteger()));
     	}
-    	task.state = state;
     	task.returnCode = resultSet[13].isNull() ? 0 : resultSet[13].asInteger();
     	task.message = resultSet[14].isNull() ? "" : resultSet[14].asString();
+	    task.state  = stateStr.empty() ? resultSet[15].isNull() ? common::types::State::Type::done : common::types::State::toState(resultSet[15].asString()) : state;
 
         results.push_back(task);
     }
@@ -344,8 +350,8 @@ std::unique_ptr<Dao::Task> Dao::loadTaskByTaskId(const std::string& taskId) {
     	if(!resultSet[8].isNull()) {
     		task->createdTS = std::chrono::time_point<std::chrono::system_clock>(std::chrono::milliseconds(resultSet[8].asInteger()));
     	}
-    	task->startTS = toTimepoint(resultSet[9].isNull() ? "" : resultSet[9].asString());
-    	task->endTS = toTimepoint(resultSet[10].isNull() ? "" : resultSet[10].asString());
+    	task->startTS = common::Timestamp::fromString(resultSet[9].isNull() ? "" : resultSet[9].asString());
+    	task->endTS = common::Timestamp::fromString(resultSet[10].isNull() ? "" : resultSet[10].asString());
     	if(!resultSet[11].isNull()) {
     	    task->lastHeartbeatTS = std::chrono::time_point<std::chrono::system_clock>(std::chrono::milliseconds(resultSet[11].asInteger()));
     	}
@@ -406,8 +412,8 @@ std::unique_ptr<Dao::Task> Dao::loadLatesTaskByEventTypeAndCrc32(const std::stri
     	}
     	task->condition = resultSet[7].isNull() ? "" : resultSet[7].asString();
 	    task->createdTS = createdTS;
-    	task->startTS = toTimepoint(resultSet[9].isNull() ? "" : resultSet[9].asString());
-    	task->endTS = toTimepoint(resultSet[10].isNull() ? "" : resultSet[10].asString());
+    	task->startTS = common::Timestamp::fromString(resultSet[9].isNull() ? "" : resultSet[9].asString());
+    	task->endTS = common::Timestamp::fromString(resultSet[10].isNull() ? "" : resultSet[10].asString());
     	if(!resultSet[11].isNull()) {
     	    task->lastHeartbeatTS = std::chrono::time_point<std::chrono::system_clock>(std::chrono::milliseconds(resultSet[11].asInteger()));
     	}
@@ -461,8 +467,8 @@ std::vector<Dao::Task> Dao::loadTasksByEventTypeAndState(const std::string& even
     	if(!resultSet[8].isNull()) {
     		task.createdTS = std::chrono::time_point<std::chrono::system_clock>(std::chrono::milliseconds(resultSet[8].asInteger()));
     	}
-    	task.startTS = toTimepoint(resultSet[9].isNull() ? "" : resultSet[9].asString());
-    	task.endTS = toTimepoint(resultSet[10].isNull() ? "" : resultSet[10].asString());
+    	task.startTS = common::Timestamp::fromString(resultSet[9].isNull() ? "" : resultSet[9].asString());
+    	task.endTS = common::Timestamp::fromString(resultSet[10].isNull() ? "" : resultSet[10].asString());
     	if(!resultSet[11].isNull()) {
     	    task.lastHeartbeatTS = std::chrono::time_point<std::chrono::system_clock>(std::chrono::milliseconds(resultSet[11].asInteger()));
     	}

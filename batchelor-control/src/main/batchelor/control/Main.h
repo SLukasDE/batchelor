@@ -3,6 +3,7 @@
 
 #include <batchelor/control/Options.h>
 
+#include <batchelor/service/schemas/TaskStatusHead.h>
 #include <batchelor/service/Service.h>
 
 #include <esl/com/http/client/Connection.h>
@@ -33,12 +34,13 @@ public:
 	int getReturnCode() const;
 
 private:
-	std::unique_ptr<esl::com::http::client::Connection> createHTTPConnection();
-	esl::com::http::client::ConnectionFactory& getHTTPConnectionFactory();
+	std::unique_ptr<esl::com::http::client::Connection> createHTTPConnection() const;
+	esl::com::http::client::ConnectionFactory& getHTTPConnectionFactory() const;
+	void showTask(const service::schemas::TaskStatusHead& taskStatus) const noexcept;
 
 	const Options& options;
 	std::string url;
-	std::unique_ptr<esl::com::http::client::ConnectionFactory> httpConnectionFactory;
+	mutable std::unique_ptr<esl::com::http::client::ConnectionFactory> httpConnectionFactory;
 	int rc = 0;
 
 	std::condition_variable notifyCV;

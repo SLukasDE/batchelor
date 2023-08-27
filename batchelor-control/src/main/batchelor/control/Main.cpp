@@ -6,7 +6,6 @@
 #include <batchelor/service/client/Service.h>
 #include <batchelor/service/schemas/RunRequest.h>
 #include <batchelor/service/schemas/RunResponse.h>
-#include <batchelor/service/schemas/TaskStatusHead.h>
 
 #include <zsystem4esl/system/signal/Signal.h>
 
@@ -190,41 +189,33 @@ void Main::showTask() {
 
 	std::unique_ptr<service::schemas::TaskStatusHead> taskHead = client.getTask(options.getTaskId());
 	if(taskHead) {
-		logger.info << "Task ID    : \"" << taskHead->runConfiguration.taskId << "\"\n";
-		logger.info << "Event type : \"" << taskHead->runConfiguration.eventType << "\"\n";
-		if(taskHead->runConfiguration.settings.empty()) {
-			logger.info << "Settings   : (empty)\n";
-		}
-		else {
-			logger.info << "Settings   :\n";
-			for(std::size_t i = 0; i<taskHead->runConfiguration.settings.size(); ++i) {
-				logger.info << "  [" << (i+1) << "]: \"" << taskHead->runConfiguration.settings[i].key << "\" = \"" << taskHead->runConfiguration.settings[i].value << "\"\n";
-			}
-
-		}
-		logger.info << "Metrics    :\n";
-		for(std::size_t i = 0; i<taskHead->metrics.size(); ++i) {
-			logger.info << "  [" << (i+1) << "]: \"" << taskHead->metrics[i].key << "\" = \"" << taskHead->runConfiguration.settings[i].value << "\"\n";
-		}
-		logger.info << "State      : \"" << taskHead->state << "\"\n";
-		logger.info << "Return code: \"" << taskHead->returnCode << "\"\n";
-		logger.info << "Message    : \"" << taskHead->message << "\"\n";
-		logger.info << "Created TS : \"" << taskHead->tsCreated << "\"\n";
-		logger.info << "Running TS : \"" << taskHead->tsRunning << "\"\n";
-		logger.info << "Finished TS: \"" << taskHead->tsFinished << "\"\n";
-		logger.info << "Heartbeat  : \"" << taskHead->tsLastHeartBeat << "\"\n";
+		showTask(*taskHead);
 	}
 }
 
 void Main::showTasks() {
+	auto httpConnection = createHTTPConnection();
+	service::client::Service client(*httpConnection);
 
+	std::vector<service::schemas::TaskStatusHead> taskHeads = client.getTasks(options.getState(), options.getEventNotAfter(), options.getEventNotBefore());
+	if(taskHeads.size() == 1) {
+		logger.info << "1 entry:\n";
+	}
+	else {
+		logger.info << taskHeads.size() << " entries:\n";
+	}
+	for(std::size_t i = 0; i < taskHeads.size(); ++i) {
+		logger.info << "-----------------\n";
+		logger.info << "#" << (i+1) << ":\n";
+		showTask(taskHeads[i]);
+	}
 }
 
 int Main::getReturnCode() const {
 	return rc;
 }
 
-std::unique_ptr<esl::com::http::client::Connection> Main::createHTTPConnection() {
+std::unique_ptr<esl::com::http::client::Connection> Main::createHTTPConnection() const {
 	auto httpConnection = getHTTPConnectionFactory().createConnection();
 	if(!httpConnection) {
 		throw esl::system::Stacktrace::add(std::runtime_error("cannot create http connection."));
@@ -232,7 +223,7 @@ std::unique_ptr<esl::com::http::client::Connection> Main::createHTTPConnection()
 	return httpConnection;
 }
 
-esl::com::http::client::ConnectionFactory& Main::getHTTPConnectionFactory() {
+esl::com::http::client::ConnectionFactory& Main::getHTTPConnectionFactory() const {
 	if(!httpConnectionFactory) {
 		httpConnectionFactory = esl::plugin::Registry::get().create<esl::com::http::client::ConnectionFactory>(
 				"eslx/com/http/client/ConnectionFactory", {
@@ -243,6 +234,32 @@ esl::com::http::client::ConnectionFactory& Main::getHTTPConnectionFactory() {
 		throw esl::system::Stacktrace::add(std::runtime_error("cannot create http connection factory."));
 	}
 	return *httpConnectionFactory;
+}
+
+void Main::showTask(const service::schemas::TaskStatusHead& taskHead) const noexcept {
+	logger.info << "Task ID    : \"" << taskHead.runConfiguration.taskId << "\"\n";
+	logger.info << "Event type : \"" << taskHead.runConfiguration.eventType << "\"\n";
+	if(taskHead.runConfiguration.settings.empty()) {
+		logger.info << "Settings   : (empty)\n";
+	}
+	else {
+		logger.info << "Settings   :\n";
+		for(std::size_t i = 0; i<taskHead.runConfiguration.settings.size(); ++i) {
+			logger.info << "  [" << (i+1) << "]: \"" << taskHead.runConfiguration.settings[i].key << "\" = \"" << taskHead.runConfiguration.settings[i].value << "\"\n";
+		}
+
+	}
+	logger.info << "Metrics    :\n";
+	for(std::size_t i = 0; i<taskHead.metrics.size(); ++i) {
+		logger.info << "  [" << (i+1) << "]: \"" << taskHead.metrics[i].key << "\" = \"" << taskHead.metrics[i].value << "\"\n";
+	}
+	logger.info << "State      : \"" << taskHead.state << "\"\n";
+	logger.info << "Return code: \"" << taskHead.returnCode << "\"\n";
+	logger.info << "Message    : \"" << taskHead.message << "\"\n";
+	logger.info << "Created TS : \"" << taskHead.tsCreated << "\"\n";
+	logger.info << "Running TS : \"" << taskHead.tsRunning << "\"\n";
+	logger.info << "Finished TS: \"" << taskHead.tsFinished << "\"\n";
+	logger.info << "Heartbeat  : \"" << taskHead.tsLastHeartBeat << "\"\n";
 }
 
 } /* namespace control */

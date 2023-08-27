@@ -31,7 +31,6 @@ public:
 	MyConsumer() = default;
 
 	bool consume(esl::io::Reader& reader) override {
-		std::cout << "Consume...\n";
 		char buffer[4096];
 		std::size_t count = reader.read(buffer, sizeof(buffer));
 
@@ -39,12 +38,7 @@ public:
 			return false;
 		}
 
-		if(count > 4096) {
-			logger.error << "CONSUMED reader returned " << count << " bytes\n";
-		}
-		else {
-			str << std::string(buffer, count);
-		}
+		str << std::string(buffer, count);
 
 		return true;
 	}
@@ -72,7 +66,6 @@ Task::Task(TaskFactory& aTaskFactoryExec, std::condition_variable& aNotifyCV, st
 
 	for(const auto& setting : runConfiguration.settings) {
 		if(setting.key == "args") {
-		    //<setting key="args" value="--propertyId=Bla --propertyFile=/wxx/secret/property.cfg"/>
 			if(hasArgs) {
 				throw std::runtime_error("Multiple definition of parameter \"" + setting.key + "\".");
 			}
@@ -83,8 +76,6 @@ Task::Task(TaskFactory& aTaskFactoryExec, std::condition_variable& aNotifyCV, st
 			settings.args = setting.value;
 		}
 		else if(setting.key == "env") {
-		    //<setting key="env" value="JOBID=${TASK_ID}"/>
-		    //<setting key="env" value="TMP_DIR=/tmp"/>
 			if(factorySettings.envFlag == TaskFactory::Flag::fixed) {
 				throw esl::system::Stacktrace::add(std::runtime_error("It is not allowed to override parameter \"" + setting.key + "\""));
 			}
@@ -99,7 +90,6 @@ Task::Task(TaskFactory& aTaskFactoryExec, std::condition_variable& aNotifyCV, st
 			}
 		}
 		else if(setting.key == "cd" || setting.value == "working-directory") {
-		    //<setting key="cd" value="/wxx/app/rose/log"/>
 			if(!settings.cd.empty()) {
 				throw esl::system::Stacktrace::add(std::runtime_error("Multiple definition of parameter \"" + setting.key + "\""));
 			}
@@ -112,7 +102,6 @@ Task::Task(TaskFactory& aTaskFactoryExec, std::condition_variable& aNotifyCV, st
 			}
 		}
 		else if(setting.key == "cmd" || setting.key == "executable") {
-		    //<setting key="cmd" value="/opt/bin/bestoptxl-calculation"/>
 			if(!settings.cmd.empty()) {
 				throw esl::system::Stacktrace::add(std::runtime_error("Multiple definition of parameter \"" + setting.key + "\""));
 			}
@@ -184,38 +173,19 @@ void Task::sendSignal(const std::string& signal) {
 void Task::run() {
 	try {
 		logger.debug << "execute ...\n";
-		if(!runBatch()) {
-			sendCancel();
+		Status podStatus = runBatch();
 
-			std::lock_guard<std::mutex> taskStatusLock(taskStatusMutex);
-			status.state = common::types::State::Type::signaled;
-			status.returnCode = 1;
-			status.message = "Applying batch config failed";
-			taskFactory.releaseProcess();
-			return;
-		}
-
-		PodStatus podStatus;
-		while(podStatus.state == PodState::active) {
+		while(podStatus.state == common::types::State::Type::running) {
 			std::this_thread::sleep_for(std::chrono::milliseconds(2000));
 			podStatus = getPodStatus();
 		}
 
 		{
 			std::lock_guard<std::mutex> taskStatusLock(taskStatusMutex);
-			if(podStatus.state == PodState::zombie) {
-				status.state = common::types::State::Type::zombie;
-				status.returnCode = 1;
-			}
-			else {
-				status.state = common::types::State::Type::done;
-				status.returnCode = podStatus.state == PodState::succeeded ? 0 : 1;
-			}
-			status.message = podStatus.line;
+			status = podStatus;
 			taskFactory.releaseProcess();
 		}
-std::cout << "execution done, status: " << podStatus.line << "\n";
-		logger.debug << "execution done, status: " << podStatus.line << "\n";
+		logger.debug << "execution done, status: " << podStatus.message << "\n";
 	}
 	catch(const std::exception& e) {
 		std::lock_guard<std::mutex> taskStatusLock(taskStatusMutex);
@@ -254,29 +224,50 @@ std::string Task::getCmd() const noexcept {
 	return kubectlCmd;
 }
 
-bool Task::runBatch() const noexcept {
-	bool success = false;
+Task::Status Task::runBatch() const noexcept {
+	Status podStatus;
+
 	try {
 		std::string deploymentYAML = getDeploymentYAML();
 		esl::io::output::Memory deploymentYamlProducer(deploymentYAML.data(), deploymentYAML.size());
 
 		std::unique_ptr<esl::system::Process> process = getProcess();
 
+		MyConsumer kubectlOutput;
+
 		(*process)[esl::system::FileDescriptor::getIn()] << esl::io::Output(deploymentYamlProducer);
-		//(*process)[esl::system::FileDescriptor::getOut()] >> esl::io::Input(kubectlOutput);
-		//(*process)[esl::system::FileDescriptor::getErr()] >> boost::filesystem::path(settings.cd + "/err.log");
+		(*process)[esl::system::FileDescriptor::getErr()] >> esl::io::Input(kubectlOutput);
 
 		auto returnCode = process->execute(esl::system::Arguments(getCmd() + " apply -f -"));
-		success = returnCode == 0;
+
+		if(returnCode == 0) {
+			podStatus.state = common::types::State::Type::running;
+			podStatus.returnCode = 0;
+		}
+		else {
+			podStatus.state = common::types::State::Type::signaled;
+			podStatus.returnCode = 1;
+			podStatus.message =  "Applying batch config failed: " + kubectlOutput.getStringStream().str();
+		}
+
 		logger.debug << "execution done, rc=" << returnCode << "\n";
 	}
 	catch(const std::exception& e) {
+		podStatus.state = common::types::State::Type::signaled;
+		podStatus.returnCode = 1;
+		podStatus.message = "Execution failed because of exception: \"" + std::string(e.what()) + "\"";
+
 		logger.warn << "Execution failed because of exception: \"" << e.what() << "\"\n";
 	}
 	catch(...) {
+		podStatus.state = common::types::State::Type::signaled;
+		podStatus.returnCode = 1;
+		podStatus.message = "Execution failed because of exception.";
+
 		logger.warn << "Execution failed because of unknown exception.\n";
 	}
-	return success;
+
+	return podStatus;
 }
 
 void Task::sendCancel() const noexcept {
@@ -300,7 +291,7 @@ std::string Task::getDeploymentYAML() const noexcept {
 	<< "apiVersion: batch/v1\n"
 	<< "kind: Job\n"
 	<< "metadata:\n"
-	<< "  name: " << taskId
+	<< "  name: " << taskId << "\n"
 	<< "spec:\n"
 	<< "  completions: 1\n"
 	<< "  ttlSecondsAfterFinished: 100\n"
@@ -315,28 +306,34 @@ std::string Task::getDeploymentYAML() const noexcept {
 	if(!settings.volumes.empty()) {
 		deploymentYaml << "      volumes:\n";
 		for(const auto& volume : settings.volumes) {
-			deploymentYaml
-			<< "        - name: " << volume.first << "\n";
-			/* todo: put all entry together with same kind+name.
-			 * there should not be multiple entries with same name but different kind.
-			 * If there are multiple entries with same name (+kind), collect all items together.
-			 */
-
+			std::map<std::pair<std::string, std::string>, std::vector<std::pair<std::string, std::string>>> keyPathByNameKinds; //name+kind -> vector<key+path>
 			for(const auto& entry : volume.second) {
+				keyPathByNameKinds[std::make_pair(entry.name, entry.kind)].push_back(std::make_pair(entry.key, entry.path));
+			}
+			if(keyPathByNameKinds.empty()){
+				continue;
+			}
+
+			deploymentYaml << "        - name: " << volume.first << "\n";
+
+			for(const auto& nameKinds : keyPathByNameKinds) {
+				if(nameKinds.second.empty()){
+					continue;
+				}
 				deploymentYaml
-				<< "          " << entry.kind << ":\n";
-				if(entry.kind == "secret") {
-					deploymentYaml
-					<< "            name: " << entry.name << "\n";
+				<< "          " << nameKinds.first.second << ":\n";
+				if(nameKinds.first.second == "secret") {
+					deploymentYaml << "            secretName: " << nameKinds.first.first << "\n";
 				}
 				else {
-					deploymentYaml
-					<< "            secretName: " << entry.name << "\n";
+					deploymentYaml << "            name: " << nameKinds.first.first << "\n";
 				}
-				deploymentYaml
-				<< "            items:\n"
-				<< "              - key: " << entry.key << "\n"
-				<< "                path: " << entry.path << "\n";
+				deploymentYaml << "            items:\n";
+				for(const auto& keyPath : nameKinds.second) {
+					deploymentYaml
+					<< "              - key: " << keyPath.first << "\n"
+					<< "                path: " << keyPath.second << "\n";
+				}
 
 			}
 
@@ -365,9 +362,7 @@ std::string Task::getDeploymentYAML() const noexcept {
 	<< "              memory: \"" << settings.resourcesRequestsMemory << "\"\n"
 	<< "            limits:\n"
 	<< "              cpu: \"" << settings.resourcesLimitsCPU << "\"\n"
-	<< "              memory: \"" << settings.resourcesLimitsMemory << "\"\n"
-	<< "          volumeMounts:\n"
-	<< "\n";
+	<< "              memory: \"" << settings.resourcesLimitsMemory << "\"\n";
 	if(!settings.mounts.empty()) {
 		deploymentYaml << "          volumeMounts:\n";
 		for(const auto& mount : settings.mounts) {
@@ -385,32 +380,27 @@ std::cout << deploymentYaml.str();
 	return deploymentYaml.str();
 }
 
-Task::PodStatus Task::getPodStatus() {
+Task::Status Task::getPodStatus() {
 	try {
 std::cout << "Run: " << getCmd() << " describe job " << taskId << "\n";
 		std::unique_ptr<esl::system::Process> process = getProcess();
 
-		//std::string emptyString = "Hello";
-		//esl::io::output::Memory emptyInput(emptyString.data(), emptyString.size());
-		//(*process)[esl::system::FileDescriptor::getIn()] << esl::io::Output(emptyInput);
-		//(*process)[esl::system::FileDescriptor::getIn()] << esl::io::Output();
-
 		MyConsumer kubectlOutput;
-		//esl::io::input::String kubectlOutput;
 		(*process)[esl::system::FileDescriptor::getOut()] >> esl::io::Input(kubectlOutput);
-		//(*process)[esl::system::FileDescriptor::getOut()] >> boost::filesystem::path("out.log");
-		//(*process)[esl::system::FileDescriptor::getErr()] >> boost::filesystem::path("err.log");
+
 		auto returnCode = process->execute(esl::system::Arguments(getCmd() + " describe job " + taskId));
 		if(returnCode != 0) {
-			Task::PodStatus podStatus;
+			Status podStatus;
 
 			if(taskCanceled) {
-				podStatus.state = PodState::signaled;
-				podStatus.line = "Cancel executed";
+				podStatus.state = common::types::State::Type::signaled;
+				podStatus.returnCode = 0;
+				podStatus.message = "Cancel executed";
 			}
 			else {
-				podStatus.state = PodState::zombie;
-				podStatus.line = "Could not get description of job";
+				podStatus.state = common::types::State::Type::zombie;
+				podStatus.returnCode = 0;
+				podStatus.message = "Could not get description of job";
 			}
 
 			return podStatus;
@@ -427,29 +417,34 @@ std::cout << "Run: " << getCmd() << " describe job " << taskId << "\n";
 				continue;
 			}
 
-			Task::PodStatus podStatus;
-			podStatus.line = esl::utility::String::ltrim(line.substr(pos+1));
+			Status podStatus;
+			podStatus.message = esl::utility::String::ltrim(line.substr(pos+1));
 
-			std::vector<std::string> values = esl::utility::String::split(podStatus.line, ' ', true);
+			std::vector<std::string> values = esl::utility::String::split(podStatus.message, ' ', true);
 			// 1 Active / 0 Succeeded / 0 Failed
 			if(values.size() != 8) {
-				podStatus.state = PodState::zombie;
-				podStatus.line = "Invalid pods status format. It should has 8 chanks, but there are " + std::to_string(values.size()) + " chunks: " + podStatus.line;
+				podStatus.state = common::types::State::Type::zombie;
+				podStatus.message = "Invalid pods status format. It should has 8 chanks, but there are " + std::to_string(values.size()) + " chunks: " + podStatus.message;
+				return podStatus;
 			}
 			try {
 				if(std::stoi(values[3]) > 0) {
-					podStatus.state = PodState::succeeded;
+					podStatus.state = common::types::State::Type::done;
+					podStatus.returnCode = 0;
 				}
 				else if(std::stoi(values[6]) > 0) {
-					podStatus.state = PodState::failed;
+					podStatus.state = common::types::State::Type::done;
+					podStatus.returnCode = 1;
 				}
 				else {
-					podStatus.state = PodState::active;
+					podStatus.state = common::types::State::Type::running;
+					podStatus.returnCode = 0;
 				}
 			}
 			catch(...) {
-				podStatus.state = PodState::zombie;
-				podStatus.line = "conversion failed: " + podStatus.line;
+				podStatus.state = common::types::State::Type::zombie;
+				podStatus.message = "conversion failed: " + podStatus.message;
+				podStatus.returnCode = 1;
 			}
 			return podStatus;
 		}
@@ -457,18 +452,20 @@ std::cout << "Run: " << getCmd() << " describe job " << taskId << "\n";
 	catch(...) {
 		logger.warn << "Execution failed.\n";
 
-		Task::PodStatus podStatus;
+		Status podStatus;
 
-		podStatus.state = PodState::zombie;
-		podStatus.line = "Could not get description of job because process thew an exception";
+		podStatus.state = common::types::State::Type::zombie;
+		podStatus.returnCode = 1;
+		podStatus.message = "Could not get description of job because process threw an exception";
 
 		return podStatus;
 	}
 
-	Task::PodStatus podStatus;
+	Status podStatus;
 
-	podStatus.state = PodState::zombie;
-	podStatus.line = "Could not get status of pod because there is no such line in description";
+	podStatus.state = common::types::State::Type::zombie;
+	podStatus.returnCode = 1;
+	podStatus.message = "Could not get status of pod because there is no such line in description";
 
 	return podStatus;
 }

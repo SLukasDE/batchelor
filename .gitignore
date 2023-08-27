@@ -5,6 +5,13 @@ build
 .project
 .cproject
 .settings
+batchelor-common/.bash_history
+batchelor-control/.bash_history
+batchelor-head/.bash_history
+batchelor-worker/.bash_history
+batchelor-worker/err.log
+batchelor-worker/out.log
+batchelor-worker/.kube/
 
 # Prerequisites
 *.d

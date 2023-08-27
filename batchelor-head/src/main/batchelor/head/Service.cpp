@@ -1,11 +1,12 @@
-#include <batchelor/head/CRC32.h>
+#include <batchelor/common/CRC32.h>
+#include <batchelor/common/Timestamp.h>
+#include <batchelor/common/types/State.h>
+
 #include <batchelor/head/Service.h>
 #include <batchelor/head/Logger.h>
 
 #include <batchelor/service/schemas/RunConfiguration.h>
 #include <batchelor/service/schemas/Signal.h>
-
-#include <batchelor/common/types/State.h>
 
 #include <esl/com/http/server/exception/StatusCode.h>
 #include <esl/system/Stacktrace.h>
@@ -18,79 +19,12 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
-#include <ctime>
-#include <stdexcept>
-#include <time.h>
 
-#if __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ > 8)
-#include <iomanip>
-#include <sstream>
-#endif
-
-#include <iostream>
 namespace batchelor {
 namespace head {
 namespace {
 Logger logger("batchelor::head::Service");
 
-// creates a string in ISO 8601 format, e.g. '2012-04-21T18:25:43-05:00'
-std::string toJSONTimestamp(const std::chrono::time_point<std::chrono::system_clock>& time_point) {
-#if __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ > 8)
-	std::ostringstream ss;
-	std::time_t tt = std::chrono::system_clock::to_time_t(time_point);
-	std::tm tm = *std::localtime(&tt);
-	ss << std::put_time(&tm, "%FT%T%z");
-	return ss.str();
-#else
-	auto millisecs = std::chrono::duration_cast<std::chrono::milliseconds>(time_point.time_since_epoch());
-	std::time_t timestamp = millisecs.count() / 1000;
-	int millisec = static_cast<int>(millisecs.count() % 1000);
-
-	std::tm tm;
-	localtime_r(&timestamp, &tm);
-
-	char buffer[100];
-	char* bufferPtr = &buffer[0];
-	std::size_t length;
-
-	length = strftime(bufferPtr, 100, "%FT%T", &tm);
-	if(length == 0) {
-		return "";
-	}
-	bufferPtr += length;
-
-	sprintf(bufferPtr, ".%03d", millisec);
-	bufferPtr += 4;
-
-	length = strftime(bufferPtr, 100-length-4, "%z", &tm);
-	if(length == 0) {
-		return "";
-	}
-
-	bufferPtr[length+1] = 0;
-	bufferPtr[length-0] = bufferPtr[length-1];
-	bufferPtr[length-1] = bufferPtr[length-2];
-	bufferPtr[length-2] = ':';
-
-	return buffer;
-#endif
-}
-
-std::chrono::time_point<std::chrono::system_clock> fromJSONTimestamp(const std::string& str) {
-	std::tm timeinfo;
-#if __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ > 8)
-	std::istringstream is{str};
-	is.imbue(std::locale("de_DE.utf-8"));
-	is >> std::get_time(&timeinfo, "%FT%T%z");
-    if (is.fail()) {
-        throw std::runtime_error("Parse failed");
-    }
-#else
-    strptime(str.c_str(), "%FT%T%z", &timeinfo);
-#endif
-    std::time_t tt = std::mktime(&timeinfo);
-    return std::chrono::system_clock::from_time_t(tt);
-}
 
 service::schemas::RunResponse makeRunResponse(const Dao::Task& task) {
 	service::schemas::RunResponse rv;
@@ -109,7 +43,7 @@ std::uint32_t makeCrc32(const service::schemas::RunRequest& runRequest) {
 		}
 		crc32Str += setting.key + "=" + setting.value;
 	}
-	return CRC32().pushData(crc32Str.c_str(), crc32Str.size()).get();
+	return common::CRC32().pushData(crc32Str.c_str(), crc32Str.size()).get();
 }
 
 std::vector<service::schemas::Setting> getMetrics(const std::vector<service::schemas::Setting>& metrics) {
@@ -144,10 +78,10 @@ service::schemas::TaskStatusHead taskToTaskStatusHead(const Dao::Task& task) {
 	rv.state = common::types::State::toString(task.state);
 	rv.returnCode = task.returnCode;
 	rv.message = task.message;
-	rv.tsCreated = toJSONTimestamp(task.createdTS);
-	rv.tsRunning = toJSONTimestamp(task.startTS);
-	rv.tsFinished = toJSONTimestamp(task.endTS);
-	rv.tsLastHeartBeat = toJSONTimestamp(task.lastHeartbeatTS);
+	rv.tsCreated = common::Timestamp::toJSON(task.createdTS);
+	rv.tsRunning = common::Timestamp::toJSON(task.startTS);
+	rv.tsFinished = common::Timestamp::toJSON(task.endTS);
+	rv.tsLastHeartBeat = common::Timestamp::toJSON(task.lastHeartbeatTS);
 
 	return rv;
 }
@@ -229,13 +163,19 @@ service::schemas::FetchResponse Service::fetchTask(const service::schemas::Fetch
 	return rv;
 }
 
-std::vector<service::schemas::TaskStatusHead> Service::getTasks(const std::string& stateStr, const std::string& eventNotAfterStr, const std::string& eventNotBeforeStr) {
+std::vector<service::schemas::TaskStatusHead> Service::getTasks(const std::string& state, const std::string& eventNotAfterStr, const std::string& eventNotBeforeStr) {
 	logger.trace << "getTasks\n";
 	std::vector<service::schemas::TaskStatusHead> rv;
 
-	auto state = common::types::State::toState(stateStr);
-	auto eventNotAfter = fromJSONTimestamp(eventNotAfterStr);
-	auto eventNotBefore = fromJSONTimestamp(eventNotBeforeStr);
+	std::chrono::system_clock::time_point eventNotAfter;
+	if(!eventNotAfterStr.empty()) {
+		eventNotAfter = common::Timestamp::fromJSON(eventNotAfterStr);
+	}
+
+	std::chrono::system_clock::time_point eventNotBefore;
+	if(!eventNotBeforeStr.empty()) {
+		eventNotBefore = common::Timestamp::fromJSON(eventNotBeforeStr);
+	}
 
 	std::vector<Dao::Task> tasks = getDao().loadTasks(state, eventNotAfter, eventNotBefore);
 	for(const auto& task : tasks) {

@@ -189,7 +189,7 @@ void Options::setCommand(const std::string& commandStr) {
 		if(!getSignal().empty()) {
 			throw ArgumentsException("Specification of command \"" + commandStr + "\" is not allowed together with option '--signal'.");
 		}
-		if(state) {
+		if(!getState().empty()) {
 			throw ArgumentsException("Specification of command \"" + commandStr + "\" is not allowed together with option '--state'.");
 		}
 		if(!getEventNotAfter().empty()) {
@@ -222,7 +222,7 @@ void Options::setCommand(const std::string& commandStr) {
 		if(getWait()) {
 			throw ArgumentsException("Specification of command \"" + commandStr + "\" is not allowed together with option '--wait'.");
 		}
-		if(state) {
+		if(!getState().empty()) {
 			throw ArgumentsException("Specification of command \"" + commandStr + "\" is not allowed together with option '--state'.");
 		}
 		if(!getEventNotAfter().empty()) {
@@ -430,25 +430,27 @@ const std::string& Options::getSignal() const noexcept {
 }
 
 void Options::setState(const char* value) {
-	if(state) {
+	if(!state.empty()) {
 		throw ArgumentsException("Multiple specification of option \"--state\" is not allowed.");
 	}
 	if(!value) {
 		throw ArgumentsException("Value missing of option \"--state\".");
 	}
 
-	state.reset(new common::types::State::Type(common::types::State::toState(value)));
+	common::types::State::Type(common::types::State::toState(value));
+	state = value;
+
+	if(state.empty()) {
+		throw ArgumentsException("Definition of invalid value \"\" for option \"--state\".");
+	}
 
 	if(!command && *command != Command::showTasks) {
 		throw ArgumentsException("Command \"" + commandToStr(*command) + "\" does not allow to use option \"--state\".");
 	}
 }
 
-common::types::State::Type Options::getState() const {
-	if(!state) {
-		throw ArgumentsException("Option '--state' is missing.");
-	}
-	return *state;
+const std::string& Options::getState() const noexcept {
+	return state;
 }
 
 void Options::setEventNotAfter(const char* value) {

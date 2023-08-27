@@ -46,7 +46,7 @@ public:
 	const std::string& getSignal() const noexcept;
 
 	void setState(const char* state);
-	common::types::State::Type getState() const;
+	const std::string& getState() const noexcept;
 
 	void setEventNotAfter(const char* eventNotAfter);
 	const std::string& getEventNotAfter() const noexcept;
@@ -72,7 +72,7 @@ private:
 	int waitCancel = -2;
 	std::string taskId;
 	std::string signal;
-	std::unique_ptr<common::types::State::Type> state;
+	std::string state;
 	std::string eventNotAfter;
 	std::string eventNotBefore;
 

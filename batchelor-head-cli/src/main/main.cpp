@@ -1,6 +1,41 @@
+/*
+ * This file is part of Batchelor.
+ * Copyright (C) 2023 Sven Lukas
+ *
+ * Batchelor is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Batchelor is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public
+ * License along with Batchelor.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+#include <batchelor/common/config/args/ArgumentsException.h>
+
+#include <batchelor/head/cli/config/args/Config.h>
+#include <batchelor/head/cli/config/xml/Config.h>
 #include <batchelor/head/cli/Logger.h>
 #include <batchelor/head/cli/Main.h>
 
+#include <esl/system/Stacktrace.h>
+
+#include <eslx/Plugin.h>
+
+#include <iostream>
+#include <memory>
+#include <sstream>
+#include <string>
+#include <utility>
+#include <vector>
+#include <fstream>
+
+/*
 #include <esl/logging/Logging.h>
 #include <esl/plugin/Registry.h>
 #include <esl/plugin/exception/PluginNotFound.h>
@@ -8,35 +43,57 @@
 
 #include <eslx/Plugin.h>
 
-#include <iostream>
 #include <stdexcept>
+*/
+
+extern const std::string artefactVersionStr;
+
+#define _STRINGIFY(x) #x
+#define STRINGIFY(x) _STRINGIFY(x)
+const std::string artefactVersionStr = STRINGIFY(TRANSFORMER_ARTEFACT_VERSION);
 
 batchelor::head::cli::Logger logger("batchelor::head::cli");
 
-#if 1
-class RegistryGuard {
-public:
-	~RegistryGuard() {
-		esl::plugin::Registry::cleanup();
-	}
-};
-#endif
-
 int main(int argc, const char* argv[]) {
+	using batchelor::common::config::args::ArgumentsException;
+	using batchelor::head::cli::Main;
+	using ArgsConfig = batchelor::head::cli::config::args::Config;
+	using XmlConfig = batchelor::head::cli::config::xml::Config;
+
+	std::cout << "batchelor-head version " << artefactVersionStr << std::endl;
+
 	int rc = -1;
-#if 1
-	RegistryGuard registry;
-#endif
+
+	struct RegistryGuard {
+		~RegistryGuard() { esl::plugin::Registry::cleanup(); }
+	} registryGuard;
 
 	try {
 		eslx::Plugin::install(esl::plugin::Registry::get(), nullptr);
-	    esl::system::Stacktrace::init("eslx/system/Stacktrace", {});
-		esl::logging::Logging::initWithFile("logger.xml");
+		esl::system::Stacktrace::init("eslx/system/Stacktrace", {});
+	    {
+	    	std::ifstream loggerFile("logger.xml");
+	    	if(!loggerFile.fail()) {
+	    		esl::logging::Logging::initWithFile("logger.xml");
+    	    }
+	    }
 
-		batchelor::head::cli::Main();
+		Main::Settings settings;
+		ArgsConfig argsConfig(settings, argc, argv);
 
-		rc = 0;
+		/* load additional data from config files */
+		for(const auto& configFile : argsConfig.getConfigFiles()) {
+			XmlConfig(settings, configFile);
+		}
+
+		Main main{ settings };
+
+		rc = main.getReturnCode();
 	}
+    catch(const ArgumentsException& e) {
+    	std::cerr << e.what() << "\n";
+    	ArgsConfig::printUsage();
+    }
     catch(const esl::plugin::exception::PluginNotFound& e) {
         std::cerr << "Plugin not found exception occurred: " << e.what() << "\n";
         const esl::plugin::Registry::BasePlugins& basePlugins = esl::plugin::Registry::get().getPlugins(e.getTypeIndex());

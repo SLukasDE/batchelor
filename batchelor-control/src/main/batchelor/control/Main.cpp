@@ -1,3 +1,21 @@
+/*
+ * This file is part of Batchelor.
+ * Copyright (C) 2023 Sven Lukas
+ *
+ * Batchelor is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Batchelor is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public
+ * License along with Batchelor.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #include <batchelor/control/Main.h>
 #include <batchelor/control/Logger.h>
 
@@ -47,8 +65,8 @@ void printStatus(const service::schemas::TaskStatusHead& taskStatus) {
 }
 }
 
-Main::Main(const Options& aOptions)
-: options(aOptions),
+Main::Main(const Settings& aSettings)
+: settings(aSettings),
   url("http://localhost:8080"),
   signal(new zsystem4esl::system::signal::Signal({}))
 {
@@ -59,21 +77,21 @@ Main::Main(const Options& aOptions)
 		}));
 	}
 
-	switch(options.getCommand()) {
-	case Command::help:
-		Options::printUsage();
-		break;
+	if(!settings.command) {
+		throw std::runtime_error("No command specified.");
+	}
+	switch(*settings.command) {
 	case Command::sendEvent:
 		sendEvent();
 		break;
 	case Command::waitTask:
-		waitTask(options.getTaskId());
+		waitTask(settings.taskId);
 		break;
 	case Command::cancelTask:
-		signalTask(options.getTaskId(), "CANCEL");
+		signalTask(settings.taskId, "CANCEL");
 		break;
 	case Command::signalTask:
-		signalTask(options.getTaskId(), options.getSignal());
+		signalTask(settings.taskId, settings.signal);
 		break;
 	case Command::showTask:
 		showTask();
@@ -99,18 +117,18 @@ void Main::sendEvent() {
 		service::client::Service client(*httpConnection);
 
 		service::schemas::RunRequest runRequest;
-		runRequest.eventType = options.getEventType();
-		runRequest.priority = options.getPriority() < 0 ? 0 : options.getPriority();
-		for(const auto& setting : options.getSettings()) {
+		runRequest.eventType = settings.eventType;
+		runRequest.priority = settings.priority < 0 ? 0 : settings.priority;
+		for(const auto& setting : settings.settings) {
 			runRequest.settings.push_back(service::schemas::Setting::make(setting.first, setting.second));
 		}
-		runRequest.condition = options.getCondition().empty() ? "${TRUE}" : options.getCondition();
+		runRequest.condition = settings.condition.empty() ? "${TRUE}" : settings.condition;
 
 		runResponse = client.runTask(runRequest);
 		logger.info << "Task ID    : \"" << runResponse.taskId << "\"\n";
 	}
 
-	if(options.getWait() || options.getWaitCancel() != -2) {
+	if(settings.wait || settings.waitCancel != -2) {
 		logger.info << "-----------------\n";
 		waitTask(runResponse.taskId);
 	}
@@ -146,12 +164,12 @@ void Main::waitTask(const std::string& taskId) {
 
 		//std::this_thread::sleep_for(std::chrono::milliseconds(5000));
 		notifyCV.wait_for(lockNotifyMutex, std::chrono::milliseconds(5000));
-		if(options.getWaitCancel() != -2 && signalsReceived > signalsProcessed) {
+		if(settings.waitCancel != -2 && signalsReceived > signalsProcessed) {
 			++signalsProcessed;
 			signalTask(taskId, "CANCEL");
 		}
-		if((options.getWaitCancel() == -2 && signalsReceived > 0)
-		|| (options.getWaitCancel() >=  0 && signalsReceived > options.getWaitCancel())) {
+		if((settings.waitCancel == -2 && signalsReceived > 0)
+		|| (settings.waitCancel >=  0 && signalsReceived > settings.waitCancel)) {
 			break;
 		}
 
@@ -187,7 +205,7 @@ void Main::showTask() {
 	auto httpConnection = createHTTPConnection();
 	service::client::Service client(*httpConnection);
 
-	std::unique_ptr<service::schemas::TaskStatusHead> taskHead = client.getTask(options.getTaskId());
+	std::unique_ptr<service::schemas::TaskStatusHead> taskHead = client.getTask(settings.taskId);
 	if(taskHead) {
 		showTask(*taskHead);
 	}
@@ -197,7 +215,7 @@ void Main::showTasks() {
 	auto httpConnection = createHTTPConnection();
 	service::client::Service client(*httpConnection);
 
-	std::vector<service::schemas::TaskStatusHead> taskHeads = client.getTasks(options.getState(), options.getEventNotAfter(), options.getEventNotBefore());
+	std::vector<service::schemas::TaskStatusHead> taskHeads = client.getTasks(settings.state, settings.eventNotAfter, settings.eventNotBefore);
 	if(taskHeads.size() == 1) {
 		logger.info << "1 entry:\n";
 	}

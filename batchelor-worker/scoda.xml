@@ -1,0 +1,102 @@
+<batchelor>
+    <setting key="maximum-tasks-running" value="4"/>
+    
+    <event id="exec-sleep" type="exec">
+        <setting key="metrics-policy" value="allow"/>
+        <setting key="metric" value="TASK_ID"/>
+        <setting key="metric" value="CLOUD_ID"/>
+        
+        <setting key="maximum-tasks-running" value="1"/>
+        <setting key="args" value="10"/>
+        <setting key="args-flag" value="override"/>
+        <setting key="env" value="JOBID=${TASK_ID}"/>
+        <setting key="env" value="TMP_DIR=/tmp"/>
+        <setting key="env-flag-global" value="extend"/>
+        <setting key="env-flag" value="fixed"/>
+        <setting key="cd" value="/tmp/wurst"/>
+        <setting key="cd-flag" value="fixed"/>
+        <setting key="cmd" value="/usr/bin/sleep"/>
+    </event>
+    
+    <event id="exec-echo" type="exec">
+        <setting key="metrics-policy" value="allow"/>
+        <setting key="metric" value="TASK_ID"/>
+        <setting key="metric" value="CLOUD_ID"/>
+        
+        <setting key="maximum-tasks-running" value="3"/>
+        <setting key="args" value="${TASK_ID}"/>
+        <setting key="args-flag" value="fixed"/>
+        <setting key="env" value="JOBID=${TASK_ID}"/>
+        <setting key="env" value="TMP_DIR=/tmp"/>
+        <setting key="env-flag-global" value="extend"/>
+        <setting key="env-flag" value="fixed"/>
+        <setting key="cd" value="/tmp/wurst"/>
+        <setting key="cd-flag" value="fixed"/>
+        <setting key="cmd" value="/usr/bin/echo"/>
+    </event>
+    
+    <event id="exec-export" type="exec">
+        <setting key="metrics-policy" value="allow"/>
+        <setting key="metric" value="TASK_ID"/>
+        <setting key="metric" value="CLOUD_ID"/>
+        
+        <setting key="maximum-tasks-running" value="3"/>
+        <setting key="args-flag" value="fixed"/>
+        <setting key="env" value="JOBID=${TASK_ID}"/>
+        <setting key="env" value="TMP_DIR=/tmp"/>
+        <setting key="env-flag-global" value="extend"/>
+        <setting key="env-flag" value="fixed"/>
+        <setting key="cd" value="/tmp/wurst"/>
+        <setting key="cd-flag" value="fixed"/>
+        <setting key="cmd" value="/usr/bin/env"/>
+    </event>
+    
+    <event id="exec-false" type="exec">
+        <setting key="metrics-policy" value="allow"/>
+        <setting key="metric" value="TASK_ID"/>
+        <setting key="metric" value="CLOUD_ID"/>
+        
+        <setting key="maximum-tasks-running" value="3"/>
+        <setting key="args-flag" value="fixed"/>
+        <setting key="env" value="JOBID=${TASK_ID}"/>
+        <setting key="env" value="TMP_DIR=/tmp"/>
+        <setting key="env-flag-global" value="extend"/>
+        <setting key="env-flag" value="fixed"/>
+        <setting key="cd" value="/tmp/wurst"/>
+        <setting key="cd-flag" value="fixed"/>
+        <setting key="cmd" value="/usr/bin/false"/>
+    </event>
+    
+    <event id="k8s-batch-poc" type="kubectl">
+        <setting key="metrics-policy" value="allow"/>
+        <setting key="metric" value="TASK_ID"/>
+        <setting key="metric" value="CLOUD_ID"/>
+        
+        <setting key="maximum-tasks-running" value="3"/>
+        <setting key="args-flag" value="override"/>
+        <setting key="env" value="JOBID=${TASK_ID}"/>
+        <setting key="env" value="TMP_DIR=/tmp"/>
+        <setting key="env-flag-global" value="extend"/>
+        <setting key="env-flag" value="fixed"/>
+        <setting key="cd" value="/tmp/wurst"/>
+        <setting key="cd-flag" value="fixed"/>
+        <setting key="cmd" value="/opt/bin/k8s-batch-cli"/>
+    </event>
+    
+    <event id="k8s-batch-sleep" type="kubectl">
+        <setting key="metrics-policy" value="allow"/>
+        <setting key="metric" value="TASK_ID"/>
+        <setting key="metric" value="CLOUD_ID"/>
+        
+        <setting key="maximum-tasks-running" value="3"/>
+        <setting key="args-flag" value="override"/>
+        <setting key="env" value="JOBID=${TASK_ID}"/>
+        <setting key="env" value="TMP_DIR=/tmp"/>
+        <setting key="env-flag-global" value="extend"/>
+        <setting key="env-flag" value="fixed"/>
+        <setting key="cd" value="/tmp/wurst"/>
+        <setting key="cd-flag" value="fixed"/>
+        <setting key="cmd" value="/usr/bin/sleep"/>
+    </event>
+    
+</batchelor>

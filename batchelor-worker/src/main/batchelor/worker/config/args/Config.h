@@ -1,0 +1,70 @@
+/*
+ * This file is part of Batchelor.
+ * Copyright (C) 2023 Sven Lukas
+ *
+ * Batchelor is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Batchelor is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public
+ * License along with Batchelor.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+#ifndef BATCHELOR_WORKER_CONFIG_ARGS_CONFIG_H_
+#define BATCHELOR_WORKER_CONFIG_ARGS_CONFIG_H_
+
+#include <batchelor/worker/Main.h>
+
+#include <string>
+#include <utility>
+#include <vector>
+
+namespace batchelor {
+namespace worker {
+namespace config {
+namespace args {
+
+class Config {
+public:
+	Config(Main::Settings& settings, int argc, const char* argv[]);
+
+	static void printUsage();
+
+	const std::vector<std::string>& getConfigFiles() const noexcept;
+
+private:
+	Main::Settings& settings;
+
+	std::vector<std::string> configFiles;
+
+	enum class SettingsState {
+		none, event, connection
+	} settingState = SettingsState::none;
+
+//	std::vector<std::pair<std::string, std::string>> currentEventSettings;
+
+	void setMaximumTasksRunning(const char* maximumTasksRunning);
+	void addMetrics(const char* key, const char* value);
+	void addConfigFile(const char* value);
+	void addSettings(const char* key, const char* value);
+
+	void addEvent(const char* id, const char* plugin);
+
+	void addConnection(const char* plugin);
+	void setUsername(const char* value);
+	void setPassword(const char* value);
+	void addURL(const char* value);
+};
+
+} /* namespace args */
+} /* namespace config */
+} /* namespace worker */
+} /* namespace batchelor */
+
+#endif /* BATCHELOR_WORKER_CONFIG_ARGS_CONFIG_H_ */

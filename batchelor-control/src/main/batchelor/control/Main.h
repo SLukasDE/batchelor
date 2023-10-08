@@ -1,7 +1,28 @@
+/*
+ * This file is part of Batchelor.
+ * Copyright (C) 2023 Sven Lukas
+ *
+ * Batchelor is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Batchelor is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public
+ * License along with Batchelor.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #ifndef BATCHELOR_CONTROL_MAIN_H_
 #define BATCHELOR_CONTROL_MAIN_H_
 
-#include <batchelor/control/Options.h>
+#include <batchelor/common/config/Server.h>
+#include <batchelor/common/types/State.h>
+
+#include <batchelor/control/Command.h>
 
 #include <batchelor/service/schemas/TaskStatusHead.h>
 #include <batchelor/service/Service.h>
@@ -14,6 +35,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace batchelor {
@@ -21,7 +43,22 @@ namespace control {
 
 class Main {
 public:
-	Main(const Options& options);
+	struct Settings {
+		std::unique_ptr<Command> command;
+		std::string eventType;
+		int priority = -1;
+		std::vector<std::pair<std::string, std::string>> settings;
+		std::string condition;
+		bool wait = false;
+		int waitCancel = -2;
+		std::string taskId;
+		std::string signal;
+		std::string state;
+		std::string eventNotAfter;
+		std::string eventNotBefore;
+		std::vector<common::config::Server> servers;
+	};
+	Main(const Settings& settings);
 
 	void stopRunning();
 
@@ -38,7 +75,7 @@ private:
 	esl::com::http::client::ConnectionFactory& getHTTPConnectionFactory() const;
 	void showTask(const service::schemas::TaskStatusHead& taskStatus) const noexcept;
 
-	const Options& options;
+	const Settings& settings;
 	std::string url;
 	mutable std::unique_ptr<esl::com::http::client::ConnectionFactory> httpConnectionFactory;
 	int rc = 0;

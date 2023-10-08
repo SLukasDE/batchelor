@@ -1,10 +1,29 @@
+/*
+ * This file is part of Batchelor.
+ * Copyright (C) 2023 Sven Lukas
+ *
+ * Batchelor is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Batchelor is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public
+ * License along with Batchelor.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #ifndef BATCHELOR_WORKER_MAIN_H_
 #define BATCHELOR_WORKER_MAIN_H_
+
+#include <batchelor/common/config/Server.h>
 
 #include <batchelor/service/schemas/RunConfiguration.h>
 #include <batchelor/service/Service.h>
 
-#include <batchelor/worker/Options.h>
 #include <batchelor/worker/plugin/Task.h>
 #include <batchelor/worker/plugin/TaskFactory.h>
 
@@ -18,38 +37,51 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace batchelor {
 namespace worker {
 
-class Main {
+class Main final {
 public:
-	Main(const Options& options);
+	struct Settings {
+		struct Event {
+			std::string id;
+			std::string type;
+			std::vector<std::pair<std::string, std::string>> settings;
+		};
 
-	void stopRunning();
+		std::vector<std::pair<std::string, std::string>> metrics;
+		std::size_t maximumTasksRunning = std::string::npos;
+
+		std::vector<Event> events;
+
+		// connection options
+		std::vector<common::config::Server> servers;
+	};
+
+	Main(const Settings& settings);
+	~Main();
+
 	int getReturnCode() const noexcept;
 
-	void setMaximumTasksRunning(std::size_t maximumTasksRunning);
-	std::size_t getMaximumTasksRunning() const noexcept;
-
-	void addEventType(const std::string& id, std::unique_ptr<plugin::TaskFactory> eventType);
-
-	void addUserDefinedMetric(const std::string& key, const std::string& value);
 	std::vector<std::pair<std::string, std::string>> getCurrentMetrics() const;
 	std::vector<std::pair<std::string, std::string>> getCurrentMetrics(const service::schemas::RunConfiguration& runConfiguration) const;
 
 private:
+	void stopRunning();
 	void signalTasks(const std::string& signal);
-	void run1();
-	bool run2();
+
+	bool runResilient();
+	bool run();
 
 	std::unique_ptr<esl::com::http::client::Connection> createHTTPConnection();
 	esl::com::http::client::ConnectionFactory& getHTTPConnectionFactory();
 
-	std::size_t maximumTasksRunning = std::string::npos;
-	std::vector<std::pair<std::string, std::string>> userDefinedMetrics;
-	std::string url;
+	const Settings& settings;
+	std::size_t nextServer = 0;
+
 	std::unique_ptr<esl::com::http::client::ConnectionFactory> httpConnectionFactory;
 	int rc = 0;
 

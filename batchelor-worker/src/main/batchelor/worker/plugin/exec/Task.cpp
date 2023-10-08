@@ -1,3 +1,21 @@
+/*
+ * This file is part of Batchelor.
+ * Copyright (C) 2023 Sven Lukas
+ *
+ * Batchelor is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Batchelor is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public
+ * License along with Batchelor.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #include <batchelor/common/types/State.h>
 
 #include <batchelor/worker/Logger.h>
@@ -8,9 +26,11 @@
 #include <esl/system/Environment.h>
 #include <esl/system/Stacktrace.h>
 #include <esl/utility/Signal.h>
+#include <esl/utility/String.h>
 
 #include <boost/filesystem.hpp>
 
+#include <cstdlib>
 #include <mutex>
 #include <stdexcept>
 
@@ -20,6 +40,58 @@ namespace plugin {
 namespace exec {
 namespace {
 Logger logger("batchelor::worker::plugin::exec::Task");
+
+std::string evaluate(const std::string& expression, const std::map<std::string, std::string>& metrics) {
+	std::string value;
+	std::string var;
+	enum {
+		intro,
+		begin,
+		end
+	} state = end;
+
+	for(std::size_t i=0; i<expression.size(); ++i) {
+		if(state == begin) {
+			if(expression.at(i) == '}') {
+				auto iter = metrics.find(var);
+				const char* val = std::getenv(var.c_str());
+
+				if(iter != metrics.end()) {
+					value += iter->second;
+				}
+				else if(val) {
+					value += val;
+				}
+				else {
+					throw std::runtime_error("No value available for variable \"" + var + "\" in expression: \"" + expression + "\"");
+				}
+				state = end;
+				var.clear();
+			}
+			else {
+				var += expression.at(i);
+			}
+		}
+		else if(state == intro) {
+			if(expression.at(i) == '{') {
+				state = begin;
+			}
+			else {
+				throw std::runtime_error("Syntax error in expression: \"" + expression + "\"");
+			}
+		}
+		else {
+			if(expression.at(i) == '$') {
+				state = intro;
+			}
+			else {
+				value += expression.at(i);
+			}
+		}
+	}
+
+	return value;
+}
 }
 
 Task::Task(TaskFactory& aTaskFactoryExec, std::condition_variable& aNotifyCV, std::mutex& notifyMutex, const std::vector<std::pair<std::string, std::string>>& aMetrics, const TaskFactory::Settings& factorySettings, const service::schemas::RunConfiguration& runConfiguration)
@@ -72,19 +144,6 @@ Task::Task(TaskFactory& aTaskFactoryExec, std::condition_variable& aNotifyCV, st
 				throw std::runtime_error("Invalid value \"" + setting.value + "\" for parameter \"" + setting.key + "\"");
 			}
 		}
-		else if(setting.key == "cmd" || setting.key == "executable") {
-		    //<setting key="cmd" value="/opt/bin/bestoptxl-calculation"/>
-			if(!settings.cmd.empty()) {
-				throw esl::system::Stacktrace::add(std::runtime_error("Multiple definition of parameter \"" + setting.key + "\""));
-			}
-			if(factorySettings.cmdFlag == TaskFactory::Flag::fixed) {
-				throw esl::system::Stacktrace::add(std::runtime_error("It is not allowed to override parameter \"" + setting.key + "\""));
-			}
-			settings.cmd = setting.value;
-			if(settings.cmd.empty()) {
-				throw std::runtime_error("Invalid value \"" + setting.value + "\" for parameter \"" + setting.key + "\"");
-			}
-		}
 		else {
 			throw esl::system::Stacktrace::add(std::runtime_error("Unknown parameter key=\"" + setting.key + "\" with value=\"" + setting.value + "\""));
 		}
@@ -97,12 +156,15 @@ Task::Task(TaskFactory& aTaskFactoryExec, std::condition_variable& aNotifyCV, st
 		settings.args = factorySettings.args + " " + settings.args;
 	}
 
-	if(settings.envs.empty()) {
+	if(factorySettings.envFlag == TaskFactory::Flag::fixed) {
 		settings.envs = factorySettings.envs;
 	}
 	else {
-		for(const auto env : factorySettings.envs) {
+		for(const auto& env : factorySettings.envs) {
 			if(factorySettings.envFlag == TaskFactory::Flag::override) {
+				/* if it is allowed to override the factory settings, then we have to keep the task specific settings.
+				 * So we don't override the task specific settings, but we add the map with a factory entry if it does not exists so far.
+				 */
 				settings.envs.insert(env);
 			}
 			else if(factorySettings.envFlag == TaskFactory::Flag::extend) {
@@ -110,6 +172,25 @@ Task::Task(TaskFactory& aTaskFactoryExec, std::condition_variable& aNotifyCV, st
 			}
 		}
 	}
+
+	/* now we replace the parameters in the envs and args */
+	const std::map<std::string, std::string> metrics(aMetrics.begin(), aMetrics.end());
+
+	// ToDo: Does not work with quotes so far!
+	std::vector<std::string> argsList = esl::utility::String::split(settings.args, ' ', true);
+	settings.args.clear();
+	for(const auto& arg : argsList) {
+		if(!settings.args.empty()) {
+			settings.args += " ";
+		}
+		settings.args += evaluate(arg, metrics);
+	}
+
+	for(auto& env : settings.envs) {
+		env.second = evaluate(env.second, metrics);
+	}
+
+
 
 	if(settings.cd.empty()) {
 		settings.cd = factorySettings.cd;
@@ -136,15 +217,12 @@ Task::Task(TaskFactory& aTaskFactoryExec, std::condition_variable& aNotifyCV, st
 		throw std::runtime_error("No process instance available to execute a process.");
 	}
 
-	if(!envs.empty()) {
-		process->setEnvironment(std::unique_ptr<esl::system::Environment>(new esl::system::Environment(std::move(envs))));
-	}
+//	if(!envs.empty()) {
+	process->setEnvironment(std::unique_ptr<esl::system::Environment>(new esl::system::Environment(std::move(envs))));
+//	}
 
-	if(!settings.cd.empty()) {
-		//throw esl::system::Stacktrace::add(std::runtime_error("Parameter \"working-directory\" is required"));
-		boost::filesystem::create_directories(settings.cd);
-		process->setWorkingDir(settings.cd);
-	}
+	boost::filesystem::create_directories(settings.cd);
+	process->setWorkingDir(settings.cd);
 
 	(*process)[esl::system::FileDescriptor::getOut()] >> boost::filesystem::path(settings.cd + "/out.log");
 	(*process)[esl::system::FileDescriptor::getErr()] >> boost::filesystem::path(settings.cd + "/err.log");

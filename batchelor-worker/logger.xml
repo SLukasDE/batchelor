@@ -26,5 +26,5 @@
 	<setting scope="eslx::test::*"                     level="trace"/>
 	<setting scope="esl::*"                            level="info"/>
 	<setting scope="jerry::engine::ProcessRegistry"    level="trace"/>
-	<setting scope="batchelor::worker::Procedure"      level="trace"/>
+	<setting scope="batchelor::*"                      level="trace"/>
 </esl-logger>

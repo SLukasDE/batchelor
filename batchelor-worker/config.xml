@@ -1,25 +1,26 @@
 <batchelor>
-    <plugin path="/opt/batchelor/plugin/execute.so"/>
-    <plugin path="/opt/batchelor/plugin/kubectl.so"/>
+    <!--plugin path="/opt/batchelor/plugin/execute.so"/-->
+    <!--plugin path="/opt/batchelor/plugin/kubectl.so"/-->
     
     <connection>
-        <setting key="url" value="https://127.0.0.1:8080"/>
-        <setting key="username" value="heinz"/>
-        <setting key="password" value="gaul"/>
+        <setting key="url" value="http://127.0.0.1:8080"/>
+        <setting key="username" value="product-id"/>
+        <setting key="password" value="secret"/>
     </connection>
     
-    <connection>
+    <!--connection>
         <setting key="url" value="https://127.0.0.1:8080"/>
         <setting key="identity-provider" value="https://127.0.0.1:8080"/>
-        <setting key="client-secret" value="gaul"/>
-    </connection>
+        <setting key="client-secret" value="product-secret"/>
+    </connection-->
     
     <setting key="maximum-tasks-running" value="4"/>
     
-    <user-defined-metric key="OS" value="zLinux"/>
-    <user-defined-metric key="CLOUD_ID" value="REWE-OnPrem|REWE-GCP"/>
+    <metric key="OS" value="Linux"/>
+    <metric key="CPU_ARCH" value="x86_64"/>
+    <metric key="CLOUD_ID" value="REWE-OnPrem"/>
     
-    <event id="wurst" type="exec">
+    <event id="exec-sleep" type="exec">
         <setting key="metrics-policy" value="allow"/>
         <setting key="metric" value="TASK_ID"/>
         <setting key="metric" value="CLOUD_ID"/>
@@ -34,10 +35,9 @@
         <setting key="cd" value="/tmp/wurst"/>
         <setting key="cd-flag" value="fixed"/>
         <setting key="cmd" value="/usr/bin/sleep"/>
-        <setting key="cmd-flag" value="fixed"/>
     </event>
     
-    <event id="wurst2" type="exec">
+    <event id="exec-false" type="exec">
         <setting key="metrics-policy" value="allow"/>
         <setting key="metric" value="TASK_ID"/>
         <setting key="metric" value="CLOUD_ID"/>
@@ -51,10 +51,9 @@
         <setting key="cd" value="/tmp/wurst"/>
         <setting key="cd-flag" value="fixed"/>
         <setting key="cmd" value="/usr/bin/false"/>
-        <setting key="cmd-flag" value="fixed"/>
     </event>
     
-    <event id="wurst3" type="kubectl">
+    <event id="k8s-batch-poc" type="kubectl">
         <setting key="metrics-policy" value="allow"/>
         <setting key="metric" value="TASK_ID"/>
         <setting key="metric" value="CLOUD_ID"/>
@@ -68,10 +67,9 @@
         <setting key="cd" value="/tmp/wurst"/>
         <setting key="cd-flag" value="fixed"/>
         <setting key="cmd" value="/opt/bin/k8s-batch-cli"/>
-        <setting key="cmd-flag" value="fixed"/>
     </event>
     
-    <event id="sleep" type="kubectl">
+    <event id="k8s-batch-sleep" type="kubectl">
         <setting key="metrics-policy" value="allow"/>
         <setting key="metric" value="TASK_ID"/>
         <setting key="metric" value="CLOUD_ID"/>
@@ -85,7 +83,6 @@
         <setting key="cd" value="/tmp/wurst"/>
         <setting key="cd-flag" value="fixed"/>
         <setting key="cmd" value="/usr/bin/sleep"/>
-        <setting key="cmd-flag" value="fixed"/>
     </event>
     
 </batchelor>

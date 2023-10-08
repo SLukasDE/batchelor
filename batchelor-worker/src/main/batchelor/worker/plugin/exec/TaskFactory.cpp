@@ -1,3 +1,21 @@
+/*
+ * This file is part of Batchelor.
+ * Copyright (C) 2023 Sven Lukas
+ *
+ * Batchelor is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Batchelor is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public
+ * License along with Batchelor.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #include <batchelor/worker/Logger.h>
 #include <batchelor/worker/plugin/exec/Task.h>
 #include <batchelor/worker/plugin/exec/TaskFactory.h>
@@ -5,6 +23,8 @@
 #include <esl/system/Stacktrace.h>
 
 #include <stdexcept>
+#include <unistd.h>
+extern char **environ;
 
 namespace batchelor {
 namespace worker {
@@ -35,7 +55,6 @@ std::unique_ptr<plugin::TaskFactory> TaskFactory::create(const std::vector<std::
 	bool hasEnvFlagGlobal = false;
 	bool hasEnvFlag = false;
 	bool hasCdFlag = false;
-	bool hasCmdFlag = false;
 
 	for(const auto& setting : aSettings) {
 		if(setting.first == "maximum-tasks-running") {
@@ -170,10 +189,10 @@ std::unique_ptr<plugin::TaskFactory> TaskFactory::create(const std::vector<std::
 			}
 			hasCdFlag = true;
 			if(setting.second == "override") {
-				settings.cmdFlag = Flag::override;
+				settings.cdFlag = Flag::override;
 			}
 			else if(setting.second == "fixed") {
-				settings.cmdFlag = Flag::fixed;
+				settings.cdFlag = Flag::fixed;
 			}
 			else {
 				throw std::runtime_error("Invalid value \"" + setting.second + "\" for parameter \"" + setting.first + "\"");
@@ -189,22 +208,6 @@ std::unique_ptr<plugin::TaskFactory> TaskFactory::create(const std::vector<std::
 				throw std::runtime_error("Invalid value \"" + setting.second + "\" for parameter \"" + setting.first + "\"");
 			}
 		}
-		else if(setting.first == "cmd-flag") {
-		    //<setting key="cmd-flag" value="override|fixed"/>
-			if(hasCmdFlag) {
-				throw std::runtime_error("Multiple definition of parameter \"" + setting.first + "\".");
-			}
-			hasCmdFlag = true;
-			if(setting.second == "override") {
-				settings.cmdFlag = Flag::override;
-			}
-			else if(setting.second == "fixed") {
-				settings.cmdFlag = Flag::fixed;
-			}
-			else {
-				throw std::runtime_error("Invalid value \"" + setting.second + "\" for parameter \"" + setting.first + "\"");
-			}
-		}
 		else {
 			throw esl::system::Stacktrace::add(std::runtime_error("Unknown parameter key=\"" + setting.first + "\" with value=\"" + setting.second + "\""));
 		}
@@ -214,8 +217,31 @@ std::unique_ptr<plugin::TaskFactory> TaskFactory::create(const std::vector<std::
 		throw std::runtime_error("Definition of parameter \"cd\" is required because parameter is flagged as 'fixed'");
 	}
 
-	if(settings.cmdFlag == Flag::fixed && settings.cmd.empty()) {
-		throw std::runtime_error("Definition of parameter \"cmd\" is required because parameter is flagged as 'fixed'");
+	if(settings.cmd.empty()) {
+		throw std::runtime_error("Definition of parameter \"cmd\" is required.");
+	}
+
+	for(char **s = environ; *s; s++) {
+		std::string env(*s);
+
+	    //<setting key="env" value="JOBID=${TASK_ID}"/>
+	    //<setting key="env" value="TMP_DIR=/tmp"/>
+		std::size_t pos = env.find('=');
+		std::string key = env.substr(0, pos);
+		std::string value;
+		if(pos != std::string::npos) {
+	        value = env.substr(pos+1);
+		}
+
+		if(settings.envFlagGlobal == Flag::override) {
+			/* if it is allowed to override the global environment variables, then we have to keep the factory specific settings.
+			 * So we don't override the factory specific settings, but we add an global entry into the factory specific map if it does not exists so far.
+			 */
+			settings.envs.insert(std::make_pair(key, value));
+		}
+		else if(settings.envFlagGlobal == Flag::extend) {
+			settings.envs[key] = value;
+		}
 	}
 
 	return std::unique_ptr<plugin::TaskFactory>(new TaskFactory(std::move(settings)));

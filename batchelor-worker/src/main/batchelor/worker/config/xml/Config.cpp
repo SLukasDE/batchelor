@@ -35,8 +35,9 @@ namespace xml {
 
 using common::config::xml::Element;
 
-Config::Config(Main::Settings& aSettings, const std::string& filename)
+Config::Config(esl::object::Context& aContext, Procedure::Settings& aSettings, const std::string& filename)
 : common::config::xml::File(filename),
+  context(aContext),
   settings(aSettings)
 {
 	parse();
@@ -46,7 +47,10 @@ void Config::parseInnerElement(const common::config::xml::Element& element) {
 	if(element.getElementName() == "plugin") {
 	}
 	else if(element.getElementName() == "connection") {
-		Connection(settings, getFilename(), element);
+		++serverCount;
+		std::string id = "batchelor-head-server-" + std::to_string(serverCount);
+
+		Connection(context, settings, id, getFilename(), element);
 	}
 	else if(element.getElementName() == "setting") {
 		Setting(settings, getFilename(), element);
@@ -55,14 +59,14 @@ void Config::parseInnerElement(const common::config::xml::Element& element) {
 		Metric(settings, getFilename(), element);
 	}
 	else if(element.getElementName() == "event") {
-		Event(settings, getFilename(), element);
+		Event(context, settings, getFilename(), element);
 	}
 	else {
 		throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Unknown element name \"" + element.getElementName() + "\"."));
 	}
 }
 
-Config::Metric::Metric(Main::Settings& settings, const std::string& filename, const common::config::xml::Element& element)
+Config::Metric::Metric(Procedure::Settings& settings, const std::string& filename, const common::config::xml::Element& element)
 : common::config::xml::Setting(filename, element)
 {
 	parse();
@@ -70,7 +74,7 @@ Config::Metric::Metric(Main::Settings& settings, const std::string& filename, co
 	settings.metrics.emplace_back(std::make_pair(key, value));
 }
 
-Config::Setting::Setting(Main::Settings& settings, const std::string& filename, const common::config::xml::Element& element)
+Config::Setting::Setting(Procedure::Settings& settings, const std::string& filename, const common::config::xml::Element& element)
 : common::config::xml::Setting(filename, element)
 {
 	parse();

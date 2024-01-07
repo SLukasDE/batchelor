@@ -16,12 +16,14 @@
  * License along with Batchelor.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <batchelor/common/config/Server.h>
 #include <batchelor/common/config/xml/Setting.h>
+#include <batchelor/common/plugin/ConnectionFactory.h>
 
 #include <batchelor/worker/config/xml/Connection.h>
 
+
 #include <esl/io/FilePosition.h>
+#include <esl/plugin/exception/PluginNotFound.h>
 #include <esl/plugin/Registry.h>
 
 #include <tinyxml2/tinyxml2.h>
@@ -33,16 +35,33 @@ namespace worker {
 namespace config {
 namespace xml {
 
-Connection::Connection(Main::Settings& mainSettings, const std::string& filename, const common::config::xml::Element& element)
+Connection::Connection(esl::object::Context& context, Procedure::Settings& mainSettings, const std::string& id, const std::string& filename, const common::config::xml::Element& element)
 : common::config::xml::ParseElements(filename, element)
 {
 	parse();
 
-	if(server.url.empty()) {
-		throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Missing key 'url'"));
+	if(type.empty()) {
+		throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Missing attribute 'type'"));
 	}
 
-	mainSettings.servers.push_back(server);
+	try {
+		context.addObject(id, esl::plugin::Registry::get().create<common::plugin::ConnectionFactory>(type, settings));
+		if(mainSettings.connectionFactoryIds.insert(id).second == false) {
+			throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Multiple definition of element <connection> with attribute id=\"" + id + "\"."));
+		}
+	}
+	catch(const esl::plugin::exception::PluginNotFound& e) {
+		throw esl::io::FilePosition::add(getFilename(), getLineNo(), e);
+	}
+	catch(const std::runtime_error& e) {
+		throw esl::io::FilePosition::add(getFilename(), getLineNo(), e);
+	}
+	catch(const std::exception& e) {
+		throw esl::io::FilePosition::add(getFilename(), getLineNo(), e);
+	}
+	catch(...) {
+		throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Could not create a database connection factory with id '" + id + "' for implementation '" + type + "' because an unknown exception occurred."));
+	}
 }
 
 void Connection::parseUserData(void*) {
@@ -52,13 +71,13 @@ void Connection::parseUserData(void*) {
 void Connection::parseInnerAttribute(const tinyxml2::XMLAttribute& attribute) {
 	std::string attributeName(attribute.Name());
 
-	if(attributeName == "plugin") {
-		if(!server.plugin.empty()) {
-			throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Multiple definition of attribute '" + attributeName + "'."));
+	if(attributeName == "type") {
+		if(!type.empty()) {
+			throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Multiple definition of attribute \"type\"."));
 		}
-		server.plugin = attribute.Value();
-		if(server.plugin.empty()) {
-			throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Value \"\" of attribute '" + attributeName + "' is invalid."));
+		type = attribute.Value();
+		if(type.empty()) {
+			throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Value \"\" of attribute 'type' is invalid"));
 		}
 	}
 	else {
@@ -68,30 +87,20 @@ void Connection::parseInnerAttribute(const tinyxml2::XMLAttribute& attribute) {
 
 void Connection::parseInnerElement(const common::config::xml::Element& element) {
 	if(element.getElementName() == "setting") {
-		Setting(server, getFilename(), element);
+		Setting(settings, getFilename(), element);
 	}
 	else {
 		throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Unknown element name \"" + element.getElementName() + "\"."));
 	}
 }
 
-Connection::Setting::Setting(common::config::Server& server, const std::string& filename, const common::config::xml::Element& element)
+//Connection::Setting::Setting(common::config::Server& server, const std::string& filename, const common::config::xml::Element& element)
+Connection::Setting::Setting(std::vector<std::pair<std::string, std::string>>& settings, const std::string& filename, const common::config::xml::Element& element)
 : common::config::xml::Setting(filename, element)
 {
 	parse();
 
-	if(key == "url") {
-		server.url = value;
-	}
-	else if(key == "username") {
-		server.username = value;
-	}
-	else if(key == "password") {
-		server.password = value;
-	}
-	else {
-		server.settings.push_back(std::make_pair(key, value));
-	}
+	settings.emplace_back(std::make_pair(key, value));
 }
 
 } /* namespace xml */

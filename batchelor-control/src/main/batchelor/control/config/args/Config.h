@@ -20,7 +20,7 @@
 #define BATCHELOR_CONTROL_CONFIG_ARGS_CONFIG_H_
 
 #include <batchelor/control/Command.h>
-#include <batchelor/control/Main.h>
+#include <batchelor/control/Procedure.h>
 
 #include <string>
 #include <utility>
@@ -33,20 +33,30 @@ namespace args {
 
 class Config {
 public:
-	Config(Main::Settings& settings, int argc, const char* argv[]);
+	Config(esl::object::Context& context, Procedure::Settings& settings, int argc, const char* argv[]);
 
 	static void printUsage();
 
 	const std::vector<std::string>& getConfigFiles() const noexcept;
 
 private:
-	Main::Settings& settings;
+	esl::object::Context& context;
+	Procedure::Settings& settings;
+
+	struct Connection {
+		std::string plugin;
+		std::vector<std::pair<std::string, std::string>> settings;
+	};
+	Connection connection;
+	unsigned int connectionCount = 0;
 
 	std::vector<std::string> configFiles;
 
-	// connection options
-	std::string currentUsername;
-	std::string currentPassword;
+	enum class SettingsState {
+		none, event, connection
+	} settingState = SettingsState::none;
+
+	void setSettingState(SettingsState settingState);
 
 	void setCommand(const std::string& commandStr);
 	const Command& getCommand() const;
@@ -62,10 +72,9 @@ private:
 	void setState(const char* state);
 	void setEventNotAfter(const char* eventNotAfter);
 	void setEventNotBefore(const char* eventNotBefore);
+
+	void addConnection(const char* plugin);
 	void addConnectionFile(const char* value);
-	void setUsername(const char* value);
-	void setPassword(const char* value);
-	void addURL(const char* value);
 };
 
 } /* namespace args */

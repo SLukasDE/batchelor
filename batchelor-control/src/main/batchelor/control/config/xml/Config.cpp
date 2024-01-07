@@ -27,7 +27,7 @@ namespace control {
 namespace config {
 namespace xml {
 
-Config::Config(Main::Settings& aSettings, const std::string& filename)
+Config::Config(Procedure::Settings& aSettings, const std::string& filename)
 : common::config::xml::File(filename),
   settings(aSettings)
 {
@@ -43,7 +43,7 @@ void Config::parseInnerElement(const common::config::xml::Element& element) {
 	}
 }
 
-Config::Setting::Setting(Main::Settings& settings, const std::string& filename, const common::config::xml::Element& element)
+Config::Setting::Setting(Procedure::Settings& settings, const std::string& filename, const common::config::xml::Element& element)
 : common::config::xml::Setting(filename, element)
 {
 	parse();

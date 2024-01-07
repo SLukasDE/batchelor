@@ -23,9 +23,12 @@
 
 #include <batchelor/service/schemas/Setting.h>
 
+#include <esl/io/Consumer.h>
+#include <esl/io/Input.h>
 #include <esl/io/input/String.h>
 #include <esl/io/output/Memory.h>
-#include <esl/io/Consumer.h>
+#include <esl/io/Reader.h>
+#include <esl/system/DefaultProcess.h>
 #include <esl/system/Environment.h>
 #include <esl/system/Stacktrace.h>
 #include <esl/utility/String.h>
@@ -226,12 +229,7 @@ void Task::run() {
 }
 
 std::unique_ptr<esl::system::Process> Task::getProcess() const {
-	std::unique_ptr<esl::system::Process> process;
-	process = esl::plugin::Registry::get().create<esl::system::Process>("eslx/system/Process", {});
-	if(!process) {
-		throw std::runtime_error("No process instance available to execute a process.");
-	}
-	return process;
+	return esl::system::DefaultProcess::createNative();
 }
 
 std::string Task::getCmd() const noexcept {

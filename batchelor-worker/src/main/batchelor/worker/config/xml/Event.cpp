@@ -22,6 +22,7 @@
 #include <batchelor/worker/plugin/TaskFactory.h>
 
 #include <esl/io/FilePosition.h>
+#include <esl/plugin/exception/PluginNotFound.h>
 #include <esl/plugin/Registry.h>
 
 #include <tinyxml2/tinyxml2.h>
@@ -33,21 +34,23 @@ namespace worker {
 namespace config {
 namespace xml {
 
-Event::Event(Main::Settings& mainSettings, const std::string& filename, const common::config::xml::Element& element)
+Event::Event(esl::object::Context& context, Procedure::Settings& mainSettings, const std::string& filename, const common::config::xml::Element& element)
 : common::config::xml::ParseElements(filename, element)
 {
 	parse();
 
-	if(event.id.empty()) {
+	if(id.empty()) {
 		throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Missing attribute 'id'"));
 	}
-	if(event.type.empty()) {
+	if(type.empty()) {
 		throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Missing attribute 'type'"));
 	}
 
-	std::unique_ptr<plugin::TaskFactory> taskFactory;
 	try {
-		taskFactory = esl::plugin::Registry::get().create<plugin::TaskFactory>(event.type, event.settings);
+		context.addObject(id, esl::plugin::Registry::get().create<plugin::TaskFactory>(type, settings));
+		if(mainSettings.taskFactoryIds.insert(id).second == false) {
+			throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Multiple definition of element <event> with attribute id=\"" + id + "\"."));
+		}
 	}
 	catch(const esl::plugin::exception::PluginNotFound& e) {
 		throw esl::io::FilePosition::add(getFilename(), getLineNo(), e);
@@ -59,10 +62,8 @@ Event::Event(Main::Settings& mainSettings, const std::string& filename, const co
 		throw esl::io::FilePosition::add(getFilename(), getLineNo(), e);
 	}
 	catch(...) {
-		throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Could not create a database connection factory with id '" + event.id + "' for implementation '" + event.type + "' because an unknown exception occurred."));
+		throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Could not create a database connection factory with id '" + id + "' for implementation '" + type + "' because an unknown exception occurred."));
 	}
-
-	mainSettings.events.push_back(event);
 }
 
 void Event::parseUserData(void*) {
@@ -74,20 +75,20 @@ void Event::parseInnerAttribute(const tinyxml2::XMLAttribute& attribute) {
 	const std::string attributeName(attribute.Name());
 
 	if(attributeName == "id") {
-		if(!event.id.empty()) {
+		if(!id.empty()) {
 			throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Multiple definition of attribute \"id\"."));
 		}
-		event.id = attribute.Value();
-		if(event.id.empty()) {
+		id = attribute.Value();
+		if(id.empty()) {
 			throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Value \"\" of attribute 'id' is invalid"));
 		}
 	}
 	else if(attributeName == "type") {
-		if(!event.type.empty()) {
+		if(!type.empty()) {
 			throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Multiple definition of attribute \"type\"."));
 		}
-		event.type = attribute.Value();
-		if(event.type.empty()) {
+		type = attribute.Value();
+		if(type.empty()) {
 			throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Value \"\" of attribute 'type' is invalid"));
 		}
 	}
@@ -98,7 +99,7 @@ void Event::parseInnerAttribute(const tinyxml2::XMLAttribute& attribute) {
 
 void Event::parseInnerElement(const common::config::xml::Element& element) {
 	if(element.getElementName() == "setting") {
-		Setting(event.settings, getFilename(), element);
+		Setting(settings, getFilename(), element);
 	}
 	else {
 		throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Unknown element name \"" + element.getElementName() + "\"."));

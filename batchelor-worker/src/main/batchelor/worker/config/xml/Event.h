@@ -23,7 +23,9 @@
 #include <batchelor/common/config/xml/ParseElements.h>
 #include <batchelor/common/config/xml/Setting.h>
 
-#include <batchelor/worker/Main.h>
+#include <batchelor/worker/Procedure.h>
+
+#include <esl/object/Context.h>
 
 #include <string>
 #include <utility>
@@ -36,7 +38,7 @@ namespace xml {
 
 class Event : public common::config::xml::ParseElements {
 public:
-	Event(Main::Settings& mainSettings, const std::string& filename, const common::config::xml::Element& element);
+	Event(esl::object::Context& context, Procedure::Settings& mainSettings, const std::string& filename, const common::config::xml::Element& element);
 
 	void setMaximumTasksRunning(std::size_t maximumTasksRunning);
 	std::size_t getMaximumTasksRunning() const noexcept;
@@ -51,7 +53,9 @@ private:
 		Setting(std::vector<std::pair<std::string, std::string>>& settings, const std::string& filename, const common::config::xml::Element& element);
 	};
 
-	Main::Settings::Event event;
+	std::string id;
+	std::string type;
+	std::vector<std::pair<std::string, std::string>> settings;
 };
 
 } /* namespace xml */

@@ -19,15 +19,18 @@
 #ifndef BATCHELOR_WORKER_CONFIG_XML_CONNECTION_H_
 #define BATCHELOR_WORKER_CONFIG_XML_CONNECTION_H_
 
-#include <batchelor/common/config/Server.h>
 #include <batchelor/common/config/xml/Element.h>
 #include <batchelor/common/config/xml/ParseElements.h>
 
-#include <batchelor/worker/Main.h>
+#include <batchelor/worker/Procedure.h>
 
 #include <tinyxml2/tinyxml2.h>
 
+#include <esl/object/Context.h>
+
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace batchelor {
 namespace worker {
@@ -36,7 +39,7 @@ namespace xml {
 
 class Connection : public common::config::xml::ParseElements {
 public:
-	Connection(Main::Settings& mainSettings, const std::string& filename, const common::config::xml::Element& element);
+	Connection(esl::object::Context& context, Procedure::Settings& mainSettings, const std::string& id, const std::string& filename, const common::config::xml::Element& element);
 
 protected:
 	void parseUserData(void*) override;
@@ -45,10 +48,11 @@ protected:
 
 private:
 	struct Setting : public common::config::xml::Setting {
-		Setting(common::config::Server& server, const std::string& filename, const common::config::xml::Element& element);
+		Setting(std::vector<std::pair<std::string, std::string>>& settings, const std::string& filename, const common::config::xml::Element& element);
 	};
 
-	common::config::Server server;
+	std::string type;
+	std::vector<std::pair<std::string, std::string>> settings;
 };
 
 } /* namespace args */

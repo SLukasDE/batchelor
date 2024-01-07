@@ -20,9 +20,11 @@
 #include <batchelor/service/server/RequestHandler.h>
 
 #include <esl/com/http/server/exception/StatusCode.h>
+#include <esl/com/http/server/Response.h>
 #include <esl/io/input/String.h>
 #include <esl/io/output/Memory.h>
 #include <esl/io/output/String.h>
+#include <esl/utility/HttpMethod.h>
 #include <esl/utility/MIME.h>
 #include <esl/utility/String.h>
 

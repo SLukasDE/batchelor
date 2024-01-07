@@ -23,7 +23,9 @@
 #include <batchelor/common/config/xml/File.h>
 #include <batchelor/common/config/xml/Setting.h>
 
-#include <batchelor/worker/Main.h>
+#include <batchelor/worker/Procedure.h>
+
+#include <esl/object/Context.h>
 
 #include <string>
 
@@ -34,21 +36,23 @@ namespace xml {
 
 class Config : public common::config::xml::File {
 public:
-	Config(Main::Settings& settings, const std::string& filename);
+	Config(esl::object::Context& context, Procedure::Settings& settings, const std::string& filename);
 
 protected:
 	void parseInnerElement(const common::config::xml::Element& element) override;
 
 private:
 	struct Metric : public common::config::xml::Setting {
-		Metric(Main::Settings& settings, const std::string& filename, const common::config::xml::Element& element);
+		Metric(Procedure::Settings& settings, const std::string& filename, const common::config::xml::Element& element);
 	};
 
 	struct Setting : public common::config::xml::Setting {
-		Setting(Main::Settings& settings, const std::string& filename, const common::config::xml::Element& element);
+		Setting(Procedure::Settings& settings, const std::string& filename, const common::config::xml::Element& element);
 	};
 
-	Main::Settings& settings;
+	esl::object::Context& context;
+	Procedure::Settings& settings;
+	unsigned int serverCount = 0;
 };
 
 } /* namespace xml */

@@ -1,0 +1,82 @@
+/*
+ * This file is part of Batchelor.
+ * Copyright (C) 2023 Sven Lukas
+ *
+ * Batchelor is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Batchelor is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public
+ * License along with Batchelor.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+#ifndef BATCHELOR_HEAD_PROCEDURE_H_
+#define BATCHELOR_HEAD_PROCEDURE_H_
+
+#include <batchelor/common/Procedure.h>
+
+#include <batchelor/head/plugin/Observer.h>
+#include <batchelor/head/plugin/Socket.h>
+#include <batchelor/head/RequestHandler.h>
+
+#include <esl/object/Context.h>
+
+#include <atomic>
+#include <functional>
+#include <map>
+#include <memory>
+#include <mutex>
+#include <set>
+#include <string>
+#include <utility>
+#include <vector>
+
+namespace batchelor {
+namespace head {
+
+class Procedure : public common::Procedure {
+public:
+	struct Settings {
+		Settings() = default;
+		Settings(const std::vector<std::pair<std::string, std::string>>& settings);
+
+		std::set<std::string> observerIds;
+		std::set<std::string> socketIds;
+
+		std::string databaseId = "batchelor-db";
+	};
+
+	Procedure(const Settings& settings);
+	~Procedure();
+
+	void procedureCancel() override;
+	void initializeContext(esl::object::Context& context) override;
+
+protected:
+	void internalProcedureRun(esl::object::Context& context) override;
+
+private:
+	struct InitializedSettings {
+		InitializedSettings(esl::object::Context& context, const Settings& settings);
+
+		std::map<std::string, std::reference_wrapper<plugin::Observer>> observers;
+		std::map<std::string, std::reference_wrapper<plugin::Socket>> sockets;
+		RequestHandler requestHandler;
+	};
+
+	const Settings& settings;
+	std::unique_ptr<InitializedSettings> initializedSettings;
+	std::mutex mutex;
+	std::atomic<unsigned int> listeners{0};
+};
+
+} /* namespace head */
+} /* namespace batchelor */
+
+#endif /* BATCHELOR_HEAD_PROCEDURE_H_ */

@@ -19,7 +19,9 @@
 #ifndef BATCHELOR_WORKER_CONFIG_ARGS_CONFIG_H_
 #define BATCHELOR_WORKER_CONFIG_ARGS_CONFIG_H_
 
-#include <batchelor/worker/Main.h>
+#include <batchelor/worker/Procedure.h>
+
+#include <esl/object/Context.h>
 
 #include <string>
 #include <utility>
@@ -32,14 +34,29 @@ namespace args {
 
 class Config {
 public:
-	Config(Main::Settings& settings, int argc, const char* argv[]);
+	Config(esl::object::Context& context, Procedure::Settings& settings, int argc, const char* argv[]);
 
 	static void printUsage();
 
 	const std::vector<std::string>& getConfigFiles() const noexcept;
 
 private:
-	Main::Settings& settings;
+	esl::object::Context& context;
+	Procedure::Settings& settings;
+
+	struct Event {
+		std::string id;
+		std::string type;
+		std::vector<std::pair<std::string, std::string>> settings;
+	};
+	Event event;
+
+	struct Connection {
+		std::string plugin;
+		std::vector<std::pair<std::string, std::string>> settings;
+	};
+	Connection connection;
+	unsigned int connectionCount = 0;
 
 	std::vector<std::string> configFiles;
 
@@ -47,7 +64,7 @@ private:
 		none, event, connection
 	} settingState = SettingsState::none;
 
-//	std::vector<std::pair<std::string, std::string>> currentEventSettings;
+	void setSettingState(SettingsState settingState);
 
 	void setMaximumTasksRunning(const char* maximumTasksRunning);
 	void addMetrics(const char* key, const char* value);
@@ -57,9 +74,6 @@ private:
 	void addEvent(const char* id, const char* plugin);
 
 	void addConnection(const char* plugin);
-	void setUsername(const char* value);
-	void setPassword(const char* value);
-	void addURL(const char* value);
 };
 
 } /* namespace args */

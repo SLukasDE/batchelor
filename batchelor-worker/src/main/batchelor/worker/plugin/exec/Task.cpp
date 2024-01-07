@@ -23,9 +23,10 @@
 
 #include <batchelor/service/schemas/Setting.h>
 
+#include <esl/system/DefaultProcess.h>
 #include <esl/system/Environment.h>
 #include <esl/system/Stacktrace.h>
-#include <esl/utility/Signal.h>
+#include <esl/system/Signal.h>
 #include <esl/utility/String.h>
 
 #include <boost/filesystem.hpp>
@@ -212,7 +213,7 @@ Task::Task(TaskFactory& aTaskFactoryExec, std::condition_variable& aNotifyCV, st
 		envs.push_back(env);
 	}
 
-	process = esl::plugin::Registry::get().create<esl::system::Process>("eslx/system/Process", {});
+	process = esl::system::DefaultProcess::createNative();
 	if(!process) {
 		throw std::runtime_error("No process instance available to execute a process.");
 	}
@@ -240,12 +241,12 @@ Task::Status Task::getStatus() const {
 
 void Task::sendSignal(const std::string& signal) {
 	if(signal == "CANCEL") {
-		process->sendSignal(esl::utility::Signal("interrupt"));
-		process->sendSignal(esl::utility::Signal("terminate"));
-		process->sendSignal(esl::utility::Signal("pipe"));
+		process->sendSignal(esl::system::Signal("interrupt"));
+		process->sendSignal(esl::system::Signal("terminate"));
+		process->sendSignal(esl::system::Signal("pipe"));
 	}
 	else {
-		process->sendSignal(esl::utility::Signal(signal));
+		process->sendSignal(esl::system::Signal(signal));
 	}
 }
 

@@ -19,13 +19,13 @@
 #ifndef BATCHELOR_WORKER_LOGGER_H_
 #define BATCHELOR_WORKER_LOGGER_H_
 
-#include <esl/logging/Level.h>
-#include <esl/logging/Logger.h>
+#include <esl/monitoring/Logger.h>
+#include <esl/monitoring/Streams.h>
 
 namespace batchelor {
 namespace worker {
 
-using Logger = esl::logging::Logger<esl::logging::Level::TRACE>;
+using Logger = esl::monitoring::Logger<esl::monitoring::Streams::Level::TRACE>;
 
 } /* namespace worker */
 } /* namespace batchelor */

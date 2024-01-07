@@ -19,73 +19,17 @@
 #ifndef BATCHELOR_CONTROL_MAIN_H_
 #define BATCHELOR_CONTROL_MAIN_H_
 
-#include <batchelor/common/config/Server.h>
-#include <batchelor/common/types/State.h>
-
-#include <batchelor/control/Command.h>
-
-#include <batchelor/service/schemas/TaskStatusHead.h>
-#include <batchelor/service/Service.h>
-
-#include <esl/com/http/client/Connection.h>
-#include <esl/com/http/client/ConnectionFactory.h>
-#include <esl/system/Signal.h>
-#
-#include <condition_variable>
-#include <memory>
-#include <mutex>
-#include <string>
-#include <utility>
-#include <vector>
+#include <batchelor/common/Main.h>
 
 namespace batchelor {
 namespace control {
 
-class Main {
+class Main : public common::Main {
 public:
-	struct Settings {
-		std::unique_ptr<Command> command;
-		std::string eventType;
-		int priority = -1;
-		std::vector<std::pair<std::string, std::string>> settings;
-		std::string condition;
-		bool wait = false;
-		int waitCancel = -2;
-		std::string taskId;
-		std::string signal;
-		std::string state;
-		std::string eventNotAfter;
-		std::string eventNotBefore;
-		std::vector<common::config::Server> servers;
-	};
-	Main(const Settings& settings);
-
-	void stopRunning();
-
-	void sendEvent();
-	void waitTask(const std::string& taskId);
-	void signalTask(const std::string& taskId, const std::string& signal);
-	void showTask();
-	void showTasks();
-
-	int getReturnCode() const;
+	Main(int argc, const char* argv[]);
 
 private:
-	std::unique_ptr<esl::com::http::client::Connection> createHTTPConnection() const;
-	esl::com::http::client::ConnectionFactory& getHTTPConnectionFactory() const;
-	void showTask(const service::schemas::TaskStatusHead& taskStatus) const noexcept;
-
-	const Settings& settings;
-	std::string url;
-	mutable std::unique_ptr<esl::com::http::client::ConnectionFactory> httpConnectionFactory;
-	int rc = 0;
-
-	std::condition_variable notifyCV;
-	std::mutex notifyMutex;
-	int signalsReceived = 0;
-	int signalsProcessed = 0;
-	std::unique_ptr<esl::system::Signal> signal;
-	std::vector<esl::system::Signal::Handler> signalHandles;
+	static int run(int argc, const char* argv[]);
 };
 
 } /* namespace control */

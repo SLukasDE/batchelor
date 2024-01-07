@@ -19,83 +19,17 @@
 #ifndef BATCHELOR_WORKER_MAIN_H_
 #define BATCHELOR_WORKER_MAIN_H_
 
-#include <batchelor/common/config/Server.h>
-
-#include <batchelor/service/schemas/RunConfiguration.h>
-#include <batchelor/service/Service.h>
-
-#include <batchelor/worker/plugin/Task.h>
-#include <batchelor/worker/plugin/TaskFactory.h>
-
-#include <esl/com/http/client/Connection.h>
-#include <esl/com/http/client/ConnectionFactory.h>
-#include <esl/system/Signal.h>
-#include <esl/utility/Signal.h>
-
-#include <condition_variable>
-#include <map>
-#include <memory>
-#include <mutex>
-#include <string>
-#include <utility>
-#include <vector>
+#include <batchelor/common/Main.h>
 
 namespace batchelor {
 namespace worker {
 
-class Main final {
+class Main : public common::Main {
 public:
-	struct Settings {
-		struct Event {
-			std::string id;
-			std::string type;
-			std::vector<std::pair<std::string, std::string>> settings;
-		};
-
-		std::vector<std::pair<std::string, std::string>> metrics;
-		std::size_t maximumTasksRunning = std::string::npos;
-
-		std::vector<Event> events;
-
-		// connection options
-		std::vector<common::config::Server> servers;
-	};
-
-	Main(const Settings& settings);
-	~Main();
-
-	int getReturnCode() const noexcept;
-
-	std::vector<std::pair<std::string, std::string>> getCurrentMetrics() const;
-	std::vector<std::pair<std::string, std::string>> getCurrentMetrics(const service::schemas::RunConfiguration& runConfiguration) const;
+	Main(int argc, const char* argv[]);
 
 private:
-	void stopRunning();
-	void signalTasks(const std::string& signal);
-
-	bool runResilient();
-	bool run();
-
-	std::unique_ptr<esl::com::http::client::Connection> createHTTPConnection();
-	esl::com::http::client::ConnectionFactory& getHTTPConnectionFactory();
-
-	const Settings& settings;
-	std::size_t nextServer = 0;
-
-	std::unique_ptr<esl::com::http::client::ConnectionFactory> httpConnectionFactory;
-	int rc = 0;
-
-	std::condition_variable notifyCV;
-	std::mutex notifyMutex;
-	std::size_t signalsReceived = 0;
-	std::size_t signalsProcessed = 0;
-	std::size_t signalsReceivedMax = 3;
-
-	std::map<std::string, std::unique_ptr<plugin::Task>> taskByTaskId;
-	std::map<std::string, std::unique_ptr<plugin::TaskFactory>> taskFactroyByEventType;
-
-	std::unique_ptr<esl::system::Signal> signal;
-	std::vector<esl::system::Signal::Handler> signalHandles;
+	static int run(int argc, const char* argv[]);
 };
 
 } /* namespace worker */

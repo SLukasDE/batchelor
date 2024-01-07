@@ -38,7 +38,7 @@ namespace plugin {
 
 class TaskFactory : public esl::object::Object {
 public:
-	virtual ~TaskFactory() = default;
+//	virtual ~TaskFactory() = default;
 
 	virtual bool isBusy() = 0;
 	virtual std::unique_ptr<Task> createTask(std::condition_variable& notifyCV, std::mutex& notifyMutex, const std::vector<std::pair<std::string, std::string>>& metrics, const service::schemas::RunConfiguration& runConfiguration) = 0;

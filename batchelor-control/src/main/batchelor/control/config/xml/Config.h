@@ -23,7 +23,7 @@
 #include <batchelor/common/config/xml/File.h>
 #include <batchelor/common/config/xml/Setting.h>
 
-#include <batchelor/control/Main.h>
+#include <batchelor/control/Procedure.h>
 
 #include <tinyxml2/tinyxml2.h>
 
@@ -36,17 +36,17 @@ namespace xml {
 
 class Config : public common::config::xml::File {
 public:
-	Config(Main::Settings& settings, const std::string& filename);
+	Config(Procedure::Settings& settings, const std::string& filename);
 
 protected:
 	void parseInnerElement(const common::config::xml::Element& element) override;
 
 private:
 	struct Setting : public common::config::xml::Setting {
-		Setting(Main::Settings& settings, const std::string& filename, const common::config::xml::Element& element);
+		Setting(Procedure::Settings& settings, const std::string& filename, const common::config::xml::Element& element);
 	};
 
-	Main::Settings& settings;
+	Procedure::Settings& settings;
 };
 
 } /* namespace xml */

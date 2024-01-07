@@ -16,10 +16,16 @@
  * License along with Batchelor.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <batchelor/common/Plugin.h>
+
+#include <batchelor/worker/Procedure.h>
 #include <batchelor/worker/Plugin.h>
 #include <batchelor/worker/plugin/exec/TaskFactory.h>
 #include <batchelor/worker/plugin/kubectl/TaskFactory.h>
 #include <batchelor/worker/plugin/TaskFactory.h>
+
+#include <esl/object/Object.h>
+#include <esl/object/Procedure.h>
 
 #include <memory>
 
@@ -29,13 +35,17 @@ namespace worker {
 void Plugin::install(esl::plugin::Registry& registry, const char* data) {
 	esl::plugin::Registry::set(registry);
 
-	registry.addPlugin<plugin::TaskFactory>(
-			"exec",
-			plugin::exec::TaskFactory::create);
+	common::Plugin::install(esl::plugin::Registry::get(), nullptr);
 
-	registry.addPlugin<plugin::TaskFactory>(
-			"kubectl",
-			plugin::kubectl::TaskFactory::create);
+	registry.addPlugin("batchelor-worker", Procedure::create);
+
+	// ---------------------------------------
+
+	registry.addPlugin("exec", plugin::exec::TaskFactory::create);
+	registry.addPlugin<esl::object::Object, plugin::TaskFactory, plugin::exec::TaskFactory::create>("batchelor-process-exec");
+
+	registry.addPlugin("kubectl", plugin::kubectl::TaskFactory::create);
+	registry.addPlugin<esl::object::Object, plugin::TaskFactory, plugin::kubectl::TaskFactory::create>("batchelor-process-kubectl");
 }
 
 } /* namespace worker */

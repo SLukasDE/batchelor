@@ -23,11 +23,12 @@
 
 #include <batchelor/head/plugin/Observer.h>
 #include <batchelor/head/plugin/Socket.h>
-#include <batchelor/head/RequestHandler.h>
 
+#include <esl/com/http/server/RequestHandler.h>
 #include <esl/object/Context.h>
 
 #include <atomic>
+#include <chrono>
 #include <functional>
 #include <map>
 #include <memory>
@@ -46,9 +47,30 @@ public:
 		Settings() = default;
 		Settings(const std::vector<std::pair<std::string, std::string>>& settings);
 
+		enum class Role {
+			readOnly,
+			execute,
+			worker
+		};
+
+		struct UserData {
+			std::string userName;
+			std::string pw;
+			std::map<std::string, std::set<Role>> rolesByNamespace;
+		};
+
+		std::map<std::string, UserData> users;
+
+		std::map<std::string, std::pair<std::string, std::string>> certFilesByHostname;
+
+		// after how many seconds do we handle a task or worker as zombie?
+		std::chrono::seconds timeoutZombie = std::chrono::minutes(5);
+
+		// after how many seconds can we delete old stuff?
+		std::chrono::seconds timeoutCleanup = std::chrono::hours(1);
+
 		std::set<std::string> observerIds;
 		std::set<std::string> socketIds;
-
 		std::string databaseId = "batchelor-db";
 	};
 
@@ -67,7 +89,7 @@ private:
 
 		std::map<std::string, std::reference_wrapper<plugin::Observer>> observers;
 		std::map<std::string, std::reference_wrapper<plugin::Socket>> sockets;
-		RequestHandler requestHandler;
+		std::unique_ptr<esl::com::http::server::RequestHandler> requestHandler;
 	};
 
 	const Settings& settings;

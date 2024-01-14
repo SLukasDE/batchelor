@@ -18,6 +18,8 @@
 
 #include <batchelor/common/Timestamp.h>
 
+#include <esl/utility/String.h>
+
 #define ONLY_C_LOCALE 1
 #include <date/date.h>
 
@@ -107,6 +109,30 @@ std::chrono::system_clock::time_point  Timestamp::fromString(const std::string& 
 	}
 
 	return tp;
+}
+
+std::chrono::milliseconds Timestamp::toDuration(const std::string& str) {
+	std::string unit;
+	for(auto iter = str.rbegin(); iter != str.rend() && !std::isdigit(*iter); ++iter) {
+		unit = *iter + unit;
+	}
+	std::string numStr = str.substr(0, str.size() - unit.size());
+	unit = esl::utility::String::toLower(esl::utility::String::trim(unit));
+
+	if(unit == "ms") {
+		return std::chrono::milliseconds(esl::utility::String::toNumber<unsigned int>(numStr));
+	}
+	if(unit == "s" || unit == "sec") {
+		return std::chrono::seconds(esl::utility::String::toNumber<unsigned int>(numStr));
+	}
+	if(unit == "m" || unit == "min") {
+		return std::chrono::minutes(esl::utility::String::toNumber<unsigned int>(numStr));
+	}
+	if(unit == "h" || unit == "houres") {
+		return std::chrono::hours(esl::utility::String::toNumber<unsigned int>(numStr));
+	}
+
+    throw std::runtime_error("Parse failed because of unknown unit '" + unit + "'");
 }
 
 } /* namespace common */

@@ -49,6 +49,7 @@ public:
 	};
 
 	struct Settings {
+		std::string namespaceId;
 		std::unique_ptr<Command> command;
 		std::string eventType;
 		int priority = -1;

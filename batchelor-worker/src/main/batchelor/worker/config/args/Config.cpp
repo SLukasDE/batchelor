@@ -18,6 +18,7 @@
 
 #include <batchelor/common/config/args/ArgumentsException.h>
 #include <batchelor/common/plugin/ConnectionFactory.h>
+#include <batchelor/common/Timestamp.h>
 
 #include <batchelor/worker/config/args/Config.h>
 #include <batchelor/worker/plugin/TaskFactory.h>
@@ -35,6 +36,65 @@ namespace worker {
 namespace config {
 namespace args {
 
+void Config::printUsage() {
+	std::cout << "batchelor-worker [OPTIONS]...\n";
+	std::cout << "\n";
+	std::cout << "Usage:\n";
+	std::cout << "  batchelor-worker [CONNECTION OPTIONS] [EVENT OPTIONS] [--metric <key> <value>] [--max-tasks <value>] [--config-file <file>]\n";
+	std::cout << "\n";
+	std::cout << "OPTIONS:\n";
+	std::cout << "  -N, --namespace             <namespace-id>  Specifies the used namespace for all commands.\n";
+	std::cout << "  -T, --maximum-tasks-running <value>         Limits maximum number of tasks running at the same time.\n";
+	std::cout << "  -I, --idle-timeout          <value>         Specifies a timeout greater than zero second.\n";
+	std::cout << "                                              The worker will exit after it is idle for this duration. Valid values are:\n";
+	std::cout << "                                              * <number>[ms]      e.g. 100000ms for 100.000 milliseconds.\n";
+	std::cout << "                                              * <number>[s|sec]   e.g. 100s or 100sec for 100 seconds.\n";
+	std::cout << "                                              * <number>[m|min]   e.g. 15m or 15min for 15 minutes.\n";
+	std::cout << "                                              * <number>[h]       e.g. 1h for 1 hour.\n";
+	std::cout << "                                              If this idle-timeout is not set, worker will never exit automatically by itself.\n";
+	std::cout << "  -W, --worker-id             <value>         Set ID of worker to specified value.\n";
+	std::cout << "  -m, --metric                <key> <value>   Specification of worker specific metrics that can be used in condition formulas.\n";
+	std::cout << "  -f, --config-file           <file>          Configuration file can contain all connection parameters, provided event types and much more\n";
+	std::cout << "  -s, --setting               <key> <value>   Event or connection specific setting.\n";
+	std::cout << "\n";
+	std::cout << "\n";
+	std::cout << "EVENT OPTIONS:\n";
+	std::cout << "  -e, --event-type           <id> <plugin>  Defines an event published as <id> at namespace <ns> and implemented by <plugin>.\n";
+	std::cout << "                                            At least one event type must be specified.\n";
+	std::cout << "                                            Subsequent settings specified by \"--setting\" are specific to the chosen plugin.\n";
+	std::cout << "\n";
+	std::cout << "                                            Most popular used plugin is \"exec\" with following settings:\n";
+	std::cout << "                                            * maximum-tasks-running: <number>\n";
+	std::cout << "                                            * metrics-policy:        allow|deny\n";
+	std::cout << "                                            * metric:                <metric-id>\n";
+	std::cout << "                                            * args:                  <arguments to call 'cmd'>\n";
+	std::cout << "                                            * args-flag:             override|extend|fixed\n";
+	std::cout << "                                            * env:                   <key=value>\n";
+	std::cout << "                                            * env-flag-global:       override|extend\n";
+	std::cout << "                                            * env-flag:              override|extend|fixed\n";
+	std::cout << "                                            * cd:                    <working directory>\n";
+	std::cout << "                                            * cd-flag:               override|fixed\n";
+	std::cout << "                                            * cmd:                   <executable> (always fixed)\n";
+	std::cout << "\n";
+	std::cout << "\n";
+	std::cout << "CONNECTION OPTIONS:\n";
+	std::cout << "  -C, --connection       <plugin>           Defines the connection to a head server.\n";
+	std::cout << "                                            Subsequent settings specified by \"--setting\" are specific to the plugin.\n";
+	std::cout << "\n";
+	std::cout << "                                            Most popular used plugin is \"basic\" with following settings:\n";
+	std::cout << "                                            * url:           <server-url>  Defines the URL to the head server.\n";
+	std::cout << "                                            * username:      <username>    If this setting is specified, basic-auth will be used.\n";
+	std::cout << "                                            * password:      <password>    If this setting is specified, basic-auth will be used.\n";
+	/*
+	std::cout << "\n";
+	std::cout << "                                            Another popular plugin is \"oidc\" with following settings:\n";
+	std::cout << "                                            * url:           <server-url>  Defines the URL to the head server.\n";
+	std::cout << "                                            * oidc-url:      <idp-url>     Defines the URL to the OAuth2 server, if client-id is used.\n";
+	std::cout << "                                            * client-id:     <client-id>   If this setting is specified, OIDC protocol is used.\n";
+	std::cout << "                                            * client-secret: <client-id>   If this setting is specified, OIDC protocol is used.\n";
+	*/
+}
+
 using batchelor::common::config::args::ArgumentsException;
 using esl::utility::String;
 
@@ -49,8 +109,20 @@ Config::Config(esl::object::Context& aContext, Procedure::Settings& aSettings, i
 			addMetrics(i+1 < argc ? argv[i+1] : nullptr, i+2 < argc ? argv[i+2] : nullptr);
 			i = i+2;
 		}
+		else if(currentArg == "-N"  || currentArg == "--namespace") {
+			setNamespaceId(i+1 < argc ? argv[i+1] : nullptr);
+			++i;
+		}
 		else if(currentArg == "-T"  || currentArg == "--maximum-tasks-running") {
 			setMaximumTasksRunning(i+1 < argc ? argv[i+1] : nullptr);
+			++i;
+		}
+		else if(currentArg == "-I"  || currentArg == "--idle-timeout") {
+			setIdleTimeout(i+1 < argc ? argv[i+1] : nullptr);
+			++i;
+		}
+		else if(currentArg == "-W"  || currentArg == "--worker-id") {
+			setWorkerId(i+1 < argc ? argv[i+1] : nullptr);
 			++i;
 		}
 		else if(currentArg == "-f"  || currentArg == "--config-file") {
@@ -75,52 +147,6 @@ Config::Config(esl::object::Context& aContext, Procedure::Settings& aSettings, i
 	}
 
 	setSettingState(SettingsState::none);
-}
-
-void Config::printUsage() {
-	std::cout << "batchelor-worker [OPTIONS]...\n";
-	std::cout << "\n";
-	std::cout << "Usage:\n";
-	std::cout << "  batchelor-worker [CONNECTION OPTIONS] [EVENT OPTIONS] [--metric <key> <value>] [--max-tasks <value>] [--config-file <file>]\n";
-	std::cout << "\n";
-	std::cout << "OPTIONS:\n";
-	std::cout << "  -T, --maximum-tasks-running <value>       Limits maximum number of tasks running at the same time.\n";
-	std::cout << "  -m, --metric                <key> <value> Specification of worker specific metrics that can be used in condition formulas.\n";
-	std::cout << "  -f, --config-file           <file>        Configuration file can contain all connection parameters, provided event types and much more\n";
-	std::cout << "  -s, --setting               <key> <value> Event or connection specific setting.\n";
-	std::cout << "\n";
-	std::cout << "\n";
-	std::cout << "EVENT OPTIONS:\n";
-	std::cout << "  -e, --event-type       <id> <plugin>      Defines an event published as <id> and implemented by <plugin>. At least one event type must be specified.\n";
-	std::cout << "                                            Subsequent settings specified by \"--setting\" are specific to the chosen plugin.\n";
-	std::cout << "                                            Most popular used plugin is \"exec\" with following settings:\n";
-	std::cout << "                                            * maximum-tasks-running: <number>\n";
-	std::cout << "                                            * metrics-policy:        allow|deny\n";
-	std::cout << "                                            * metric:                <metric-id>\n";
-	std::cout << "                                            * args:                  <arguments to call 'cmd'>\n";
-	std::cout << "                                            * args-flag:             override|extend|fixed\n";
-	std::cout << "                                            * env:                   <key=value>\n";
-	std::cout << "                                            * env-flag-global:       override|extend\n";
-	std::cout << "                                            * env-flag:              override|extend|fixed\n";
-	std::cout << "                                            * cd:                    <working directory>\n";
-	std::cout << "                                            * cd-flag:               override|fixed\n";
-	std::cout << "                                            * cmd:                   <executable> (always fixed)\n";
-	std::cout << "\n";
-	std::cout << "\n";
-	std::cout << "CONNECTION OPTIONS:\n";
-	std::cout << "  -C, --connection       <plugin>           Defines the connection to a head server.\n";
-	std::cout << "                                            Subsequent settings specified by \"--setting\" are specific to the plugin.\n";
-	std::cout << "\n";
-	std::cout << "                                            Most popular used plugin is \"basic\" with following settings:\n";
-	std::cout << "                                            * url:           <server-url>  Defines the URL to the head server.\n";
-	std::cout << "                                            * username:      <username>    If this setting is specified, basic-auth will be used.\n";
-	std::cout << "                                            * password:      <password>    If this setting is specified, basic-auth will be used.\n";
-	std::cout << "\n";
-	std::cout << "                                            Another popular plugin is \"oidc\" with following settings:\n";
-	std::cout << "                                            * url:           <server-url>  Defines the URL to the head server.\n";
-	std::cout << "                                            * oidc-url:      <idp-url>     Defines the URL to the OAuth2 server, if client-id is used.\n";
-	std::cout << "                                            * client-id:     <client-id>   If this setting is specified, OIDC protocol is used.\n";
-	std::cout << "                                            * client-secret: <client-id>   If this setting is specified, OIDC protocol is used.\n";
 }
 
 const std::vector<std::string>& Config::getConfigFiles() const noexcept {
@@ -151,6 +177,18 @@ void Config::setSettingState(SettingsState aSettingState) {
 	connection = Connection();
 }
 
+void Config::setNamespaceId(const char* namespaceId) {
+	if(!settings.namespaceId.empty()) {
+		throw ArgumentsException("Multiple specification of option \"--namespace\" is not allowed.");
+	}
+	if(!namespaceId) {
+		throw ArgumentsException("Value missing of option \"--namespace\".");
+	}
+
+	setSettingState(SettingsState::event);
+
+	settings.namespaceId = namespaceId;
+}
 
 void Config::setMaximumTasksRunning(const char* aMaximumTasksRunning) {
 	if(settings.maximumTasksRunning != std::string::npos) {
@@ -165,6 +203,37 @@ void Config::setMaximumTasksRunning(const char* aMaximumTasksRunning) {
 	}
 	catch(const std::exception& e) {
 		throw ArgumentsException("Value of option \"--maximum-tasks-running\" must be equal or greater than 0, but lower than " + std::string(aMaximumTasksRunning) + ". " + e.what());
+	}
+}
+
+void Config::setIdleTimeout(const char* idleTimeout) {
+	if(settings.idleTimeout.count() > 0) {
+		throw ArgumentsException("Multiple specification of option \"--idle-timeout\" is not allowed.");
+	}
+	if(!idleTimeout) {
+		throw ArgumentsException("Value missing of option \"--idle-timeout\".");
+	}
+
+	try {
+		settings.idleTimeout = common::Timestamp::toDuration(idleTimeout);
+	}
+	catch(const std::exception& e) {
+		throw ArgumentsException("Invalid value \"" + std::string(idleTimeout) + "\" of option \"--idle-timeout\". " + e.what());
+	}
+}
+
+void Config::setWorkerId(const char* workerId) {
+	if(!settings.workerId.empty()) {
+		throw ArgumentsException("Multiple specification of option \"--worker-id\" is not allowed.");
+	}
+	if(!workerId) {
+		throw ArgumentsException("Value missing of option \"--worker-id\".");
+	}
+
+	settings.workerId = workerId;
+
+	if(settings.workerId.empty()) {
+		throw ArgumentsException("Invalid value \"\" for option \"--worker-id\".");
 	}
 }
 
@@ -204,18 +273,18 @@ void Config::addSettings(const char* key, const char* value) {
 	}
 }
 
-void Config::addEvent(const char* aId, const char* aPlugin) {
-	if(!aId) {
+void Config::addEvent(const char* id, const char* plugin) {
+	if(!id) {
 		throw ArgumentsException("Id missing of option \"--event-type\".");
 	}
-	if(!aPlugin) {
+	if(!plugin) {
 		throw ArgumentsException("Plugin missing of option \"--event-type\".");
 	}
 
 	setSettingState(SettingsState::event);
 
-	event.id = aId;
-	event.type = aPlugin;
+	event.id = id;
+	event.type = plugin;
 }
 
 void Config::addConnection(const char* value) {

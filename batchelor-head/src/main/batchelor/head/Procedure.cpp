@@ -34,20 +34,55 @@ namespace head {
 namespace {
 Logger logger("batchelor::head::Procedure");
 
-std::vector<std::pair<std::string, std::string>> createRequestHandlerSettings(const Procedure::Settings& settings) {
-	std::vector<std::pair<std::string, std::string>> requestHandlerSettings;
-
-	requestHandlerSettings.emplace_back("db-connection-factory", settings.databaseId);
-
-	return requestHandlerSettings;
+std::unique_ptr<esl::com::http::server::RequestHandler> createRequestHandlerSettings(esl::object::Context& context, const Procedure::Settings& settings) {
+	std::unique_ptr<RequestHandler> requestHandler(new RequestHandler(settings));
+	requestHandler->initializeContext(context);
+	return std::unique_ptr<esl::com::http::server::RequestHandler>(requestHandler.release());
 }
+}
+
+Procedure::Settings::Settings(const std::vector<std::pair<std::string, std::string>>& settings) {
+	std::chrono::seconds tmpTimeoutZombie = std::chrono::seconds(0);
+	std::chrono::seconds tmpTimeoutCleanup = std::chrono::seconds(0);
+
+    for(const auto& setting : settings) {
+    	/*
+        if(setting.first == "db-connection-factory") {
+            if(!dbConnectionFactoryId.empty()) {
+                throw esl::system::Stacktrace::add(std::runtime_error("multiple definition of attribute '" + setting.first + "'."));
+            }
+            dbConnectionFactoryId = setting.second;
+            if(dbConnectionFactoryId.empty()) {
+                throw esl::system::Stacktrace::add(std::runtime_error("Invalid value \"\" for attribute '" + setting.first + "'."));
+            }
+        }
+        else if(setting.first == "plugin-id") {
+            if(setting.second.empty()) {
+                throw esl::system::Stacktrace::add(std::runtime_error("Invalid value \"\" for attribute '" + setting.first + "'."));
+            }
+            if(!pluginIds.insert(setting.second).second) {
+                throw esl::system::Stacktrace::add(std::runtime_error("Multiple definition of value \"" + setting.second + "\" for attribute '" + setting.first + "'."));
+            }
+        }
+        else {
+            throw esl::system::Stacktrace::add(std::runtime_error("unknown attribute '" + setting.first + "'."));
+        }
+        */
+        throw esl::system::Stacktrace::add(std::runtime_error("unknown attribute '" + setting.first + "'."));
+    }
+
+	if(tmpTimeoutZombie.count() > 0) {
+		timeoutZombie = tmpTimeoutZombie;
+	}
+
+	if(tmpTimeoutCleanup.count() > 0) {
+		timeoutCleanup = tmpTimeoutCleanup;
+	}
 }
 
 Procedure::InitializedSettings::InitializedSettings(esl::object::Context& context, const Settings& settings)
-: requestHandler(RequestHandler::Settings(createRequestHandlerSettings(settings)))
+: requestHandler(createRequestHandlerSettings(context, settings))
 {
-	requestHandler.initializeContext(context);
-
 	for(const auto& id : settings.observerIds) {
 		if(observers.emplace(id, std::ref(context.getObject<plugin::Observer>(id))).second == false) {
 			throw esl::system::Stacktrace::add(std::runtime_error("Multiple definition of observer id \"" + id + "\"."));
@@ -92,7 +127,7 @@ void Procedure::internalProcedureRun(esl::object::Context& context) {
 	logger.info << "Listen...\n";
 	for(auto& socket : initializedSettings->sockets) {
 		++listeners;
-		socket.second.get().get().listen(initializedSettings->requestHandler, [&]{
+		socket.second.get().get().listen(*initializedSettings->requestHandler, [&]{
 				logger.info << "Socket released.\n";
 				if((--listeners) == 0) {
 					procedureCancel();

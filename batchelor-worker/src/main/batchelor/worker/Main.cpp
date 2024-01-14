@@ -44,6 +44,10 @@ int Main::run(int argc, const char* argv[]) {
 		config::xml::Config(context, settings, configFile);
 	}
 
+	if(settings.namespaceId.empty()) {
+		settings.namespaceId = "default";
+	}
+
 	Procedure procedure{ settings };
 	procedure.initializeContext(context);
 	procedure.procedureRun(context);

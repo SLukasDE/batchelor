@@ -42,19 +42,19 @@ public:
     Service(const esl::com::http::client::Connection& connection);
 
 	// used by worker
-	schemas::FetchResponse fetchTask(const schemas::FetchRequest& fetchRequest) override;
+	schemas::FetchResponse fetchTask(const std::string& namespaceId, const schemas::FetchRequest& fetchRequest) override;
 
 	// used by controller-cli
-	std::vector<schemas::TaskStatusHead> getTasks(const std::string& state, const std::string& eventNotAfter, const std::string& eventNotBefore) override;
+	std::vector<schemas::TaskStatusHead> getTasks(const std::string& namespaceId, const std::string& state, const std::string& eventNotAfter, const std::string& eventNotBefore) override;
 
 	// used by controller-cli
-	std::unique_ptr<schemas::TaskStatusHead> getTask(const std::string& taskId) override;
+	std::unique_ptr<schemas::TaskStatusHead> getTask(const std::string& namespaceId, const std::string& taskId) override;
 
 	// used by controller-cli
-	schemas::RunResponse runTask(const schemas::RunRequest& runRequest) override;
+	schemas::RunResponse runTask(const std::string& namespaceId, const schemas::RunRequest& runRequest) override;
 
 	// used by controller-cli
-	void sendSignal(const std::string& taskId, const std::string& signal) override;
+	void sendSignal(const std::string& namespaceId, const std::string& taskId, const std::string& signal) override;
 
 private:
     const esl::com::http::client::Connection& connection;

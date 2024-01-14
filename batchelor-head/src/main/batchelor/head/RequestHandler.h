@@ -23,16 +23,23 @@
 
 #include <batchelor/head/Dao.h>
 #include <batchelor/head/plugin/Observer.h>
+#include <batchelor/head/Procedure.h>
 
+#include <esl/com/http/server/Request.h>
+#include <esl/com/http/server/RequestContext.h>
 #include <esl/com/http/server/RequestHandler.h>
+#include <esl/database/Connection.h>
 #include <esl/database/ConnectionFactory.h>
 #include <esl/object/Context.h>
 #include <esl/object/InitializeContext.h>
 
+#include <chrono>
 #include <condition_variable>
 #include <functional>
+#include <map>
 #include <memory>
 #include <mutex>
+#include <set>
 #include <string>
 #include <thread>
 #include <utility>
@@ -45,6 +52,15 @@ class RequestHandler : public service::server::RequestHandler, public esl::objec
 public:
 	struct Settings {
 		Settings(const std::vector<std::pair<std::string, std::string>>& settings);
+		Settings(const Procedure::Settings& settings);
+
+		std::map<std::string, Procedure::Settings::UserData> users;
+
+		// after how many seconds do we handle a task or worker as zombie?
+		std::chrono::seconds timeoutZombie = std::chrono::minutes(5);
+
+		// after how many seconds can we delete old stuff?
+		std::chrono::seconds timeoutCleanup = std::chrono::hours(1);
 
 		std::string dbConnectionFactoryId;
 		std::set<std::string> pluginIds;
@@ -57,6 +73,8 @@ public:
 
 	void initializeContext(esl::object::Context& context) override;
 
+	esl::io::Input accept(esl::com::http::server::RequestContext& requestContext) const override;
+
 	esl::database::ConnectionFactory& getDbConnectionFactory() const noexcept;
 	void onUpdateTask(const Dao::Task& task);
 
@@ -65,6 +83,7 @@ private:
 		InitializedSettings(esl::object::Context& context, const Settings& settings);
 
 		esl::database::ConnectionFactory& dbConnectionFactory;
+		//std::unique_ptr<esl::database::Connection> dbConnection;
 		std::vector<std::reference_wrapper<plugin::Observer>> plugins;
 	};
 
@@ -72,12 +91,14 @@ private:
 	std::unique_ptr<InitializedSettings> initializedSettings;
 
 	std::condition_variable notifyCV;
-	std::mutex notifyMutex;
+	mutable std::mutex notifyMutex;
 	bool threadStopping = false;
 	std::thread thread;
 
+	void addRolesByNamespaceValue(esl::com::http::server::RequestContext& requestContext) const;
 	void threadRun();
 	void threadStop();
+	void cleanup();
 };
 
 } /* namespace head */

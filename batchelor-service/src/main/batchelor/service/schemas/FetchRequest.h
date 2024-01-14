@@ -32,6 +32,8 @@ namespace service {
 namespace schemas {
 
 struct FetchRequest {
+	std::string workerId;
+
 	/* List of available event types and a flag, if event type is possible to use in FetchResposne.
 	 *
 	 * A request is still valid with multiple entries with same value, even if it makes no sense. But the receiver should be able to handle this.
@@ -56,7 +58,8 @@ struct FetchRequest {
 };
 
 SERGUT_FUNCTION(FetchRequest, data, ar) {
-    ar & SERGUT_NESTED_MMEMBER(data, eventTypes, eventTypes)
+    ar & SERGUT_MMEMBER(data, workerId)
+       & SERGUT_NESTED_MMEMBER(data, eventTypes, eventTypes)
        & SERGUT_NESTED_MMEMBER(data, metrics, metric)
        & SERGUT_NESTED_MMEMBER(data, tasks, tasks);
 }

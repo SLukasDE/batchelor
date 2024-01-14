@@ -38,11 +38,11 @@ public:
 	esl::io::Input accept(esl::com::http::server::RequestContext& requestContext) const override;
 
 protected:
-	RequestHandler(std::function<std::unique_ptr<Service>(esl::object::Context&)> createService);
+	RequestHandler(std::function<std::unique_ptr<Service>(const esl::object::Context&)> createService);
 
 private:
     //const ServiceFactory& serviceFactory;
-    std::function<std::unique_ptr<Service>(esl::object::Context&)> createService;
+    std::function<std::unique_ptr<Service>(const esl::object::Context&)> createService;
 
     std::unique_ptr<Service> makeService(esl::object::Context& context) const;
 };

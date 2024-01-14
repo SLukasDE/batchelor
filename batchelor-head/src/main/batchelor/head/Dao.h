@@ -60,14 +60,24 @@ public:
 
 	Dao(esl::database::Connection& dbConnection);
 
-	void saveTask(const Task& task);
-	bool insertTask(const Task& task);
-	bool updateTask(const Task& task);
+	void saveTask(const std::string& namespaceId, const Task& task);
+	bool insertTask(const std::string& namespaceId, const Task& task);
+	bool updateTask(const std::string& namespaceId, const Task& task);
 
-	std::vector<Task> loadTasks(const std::string& state, const std::chrono::system_clock::time_point& eventNotAfter, const std::chrono::system_clock::time_point& eventNotBefore);
-	std::unique_ptr<Task> loadTaskByTaskId(const std::string& taskId);
-	std::unique_ptr<Task> loadLatesTaskByEventTypeAndCrc32(const std::string& eventType, std::uint32_t crc32);
-	std::vector<Task> loadTasksByEventTypeAndState(const std::string& eventType, const batchelor::common::types::State::Type& state);
+	std::vector<Task> loadTasks(const std::string& namespaceId, const std::string& state, const std::chrono::system_clock::time_point& eventNotAfter, const std::chrono::system_clock::time_point& eventNotBefore);
+	std::unique_ptr<Task> loadTaskByTaskId(const std::string& namespaceId, const std::string& taskId);
+	std::unique_ptr<Task> loadLatesTaskByEventTypeAndCrc32(const std::string& namespaceId, const std::string& eventType, std::uint32_t crc32);
+	std::vector<Task> loadTasksByEventTypeAndState(const std::string& namespaceId, const std::string& eventType, const batchelor::common::types::State::Type& state);
+
+	// insert or update given event types with current timestamp
+	void updateEventTypes(const std::vector<std::pair<std::string, std::string>>& eventTypes);
+
+	// load all event types, delete outdated event types and return remaining event types
+	std::vector<std::string> loadEventTypes(const std::string& namespaceId);
+
+	void cleanup(std::chrono::seconds timeoutZombie, std::chrono::seconds timeoutCleanup);
+
+private:
 
 	esl::database::Connection& dbConnection;
 	const bool isSQLite;

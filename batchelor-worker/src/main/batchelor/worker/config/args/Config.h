@@ -34,9 +34,9 @@ namespace args {
 
 class Config {
 public:
-	Config(esl::object::Context& context, Procedure::Settings& settings, int argc, const char* argv[]);
-
 	static void printUsage();
+
+	Config(esl::object::Context& context, Procedure::Settings& settings, int argc, const char* argv[]);
 
 	const std::vector<std::string>& getConfigFiles() const noexcept;
 
@@ -66,7 +66,10 @@ private:
 
 	void setSettingState(SettingsState settingState);
 
+	void setNamespaceId(const char* namespaceId);
 	void setMaximumTasksRunning(const char* maximumTasksRunning);
+	void setIdleTimeout(const char* maximumTasksRunning);
+	void setWorkerId(const char* workerId);
 	void addMetrics(const char* key, const char* value);
 	void addConfigFile(const char* value);
 	void addSettings(const char* key, const char* value);

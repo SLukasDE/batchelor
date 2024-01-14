@@ -1,7 +1,7 @@
 #include <batchelor/common/config/args/ArgumentsException.h>
 #include <batchelor/common/Main.h>
 
-#include <openesl/Plugin.h>
+#include <esl/Plugin.h>
 
 #include <esl/crypto/GTXKeyStore.h>
 #include <esl/monitoring/LogbookLogging.h>
@@ -23,7 +23,7 @@ Main::Main(int(*run)(int, const char**), void(*printUsage)(), int argc, const ch
 
 	try {
 		esl::plugin::Registry& registry(esl::plugin::Registry::get());
-		openesl::Plugin::install(registry, nullptr);
+		esl::Plugin::install(registry, nullptr);
 		registry.setObject(esl::crypto::GTXKeyStore::createNative());
 		registry.setObject(esl::system::DefaultStacktraceFactory::createNative());
 #if 1

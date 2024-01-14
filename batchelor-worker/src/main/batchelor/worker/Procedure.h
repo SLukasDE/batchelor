@@ -32,6 +32,7 @@
 #include <esl/object/Context.h>
 #include <esl/object/Procedure.h>
 
+#include <chrono>
 #include <condition_variable>
 #include <functional>
 #include <map>
@@ -48,11 +49,15 @@ namespace worker {
 class Procedure : public common::Procedure {
 public:
 	struct Settings {
-		Settings() = default;
+		Settings();
 		Settings(const std::vector<std::pair<std::string, std::string>>& settings);
 
+		std::string namespaceId;
+		std::string workerId;
 		std::vector<std::pair<std::string, std::string>> metrics;
 		std::size_t maximumTasksRunning = std::string::npos;
+		std::chrono::milliseconds requestInterval{5000};
+		std::chrono::milliseconds idleTimeout{0};
 		std::set<std::string> taskFactoryIds;
 		std::set<std::string> connectionFactoryIds;
 	};
@@ -100,7 +105,7 @@ private:
 	std::size_t signalsReceivedMax = 3;
 
 	std::map<std::string, std::unique_ptr<plugin::Task>> taskByTaskId;
-
+	std::chrono::time_point<std::chrono::steady_clock> idleTimeAt;
 };
 
 } /* namespace worker */

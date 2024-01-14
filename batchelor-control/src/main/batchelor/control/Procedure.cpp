@@ -148,7 +148,14 @@ void Procedure::sendEvent() {
 		}
 		runRequest.condition = settings.condition.empty() ? "${TRUE}" : settings.condition;
 
-		runResponse = client.runTask(runRequest);
+		runResponse = client.runTask(settings.namespaceId, runRequest);
+
+		if(runResponse.taskId.empty()) {
+			rc = 1;
+			logger.info << "Message    : \"" << runResponse.message << "\"\n";
+			logger.info << "-----------------\n";
+			return;
+		}
 		logger.info << "Task ID    : \"" << runResponse.taskId << "\"\n";
 	}
 
@@ -166,7 +173,7 @@ void Procedure::waitTask(const std::string& taskId) {
 		auto httpConnection = createHTTPConnection();
 		service::client::Service client(*httpConnection);
 
-		std::unique_ptr<service::schemas::TaskStatusHead> taskStatus = client.getTask(taskId);
+		std::unique_ptr<service::schemas::TaskStatusHead> taskStatus = client.getTask(settings.namespaceId, taskId);
 		if(!taskStatus) {
 			return;
 		}
@@ -200,7 +207,7 @@ void Procedure::waitTask(const std::string& taskId) {
 		auto httpConnection = createHTTPConnection();
 		service::client::Service client(*httpConnection);
 
-		std::unique_ptr<service::schemas::TaskStatusHead> taskStatus = client.getTask(taskId);
+		std::unique_ptr<service::schemas::TaskStatusHead> taskStatus = client.getTask(settings.namespaceId, taskId);
 		if(!taskStatus) {
 			return;
 		}
@@ -222,14 +229,14 @@ void Procedure::signalTask(const std::string& taskId, const std::string& signal)
 	auto httpConnection = createHTTPConnection();
 	service::client::Service client(*httpConnection);
 
-	client.sendSignal(taskId, signal);
+	client.sendSignal(settings.namespaceId, taskId, signal);
 }
 
 void Procedure::showTask() {
 	auto httpConnection = createHTTPConnection();
 	service::client::Service client(*httpConnection);
 
-	std::unique_ptr<service::schemas::TaskStatusHead> taskHead = client.getTask(settings.taskId);
+	std::unique_ptr<service::schemas::TaskStatusHead> taskHead = client.getTask(settings.namespaceId, settings.taskId);
 	if(taskHead) {
 		showTask(*taskHead);
 	}
@@ -239,7 +246,7 @@ void Procedure::showTasks() {
 	auto httpConnection = createHTTPConnection();
 	service::client::Service client(*httpConnection);
 
-	std::vector<service::schemas::TaskStatusHead> taskHeads = client.getTasks(settings.state, settings.eventNotAfter, settings.eventNotBefore);
+	std::vector<service::schemas::TaskStatusHead> taskHeads = client.getTasks(settings.namespaceId, settings.state, settings.eventNotAfter, settings.eventNotBefore);
 	if(taskHeads.size() == 1) {
 		logger.info << "1 entry:\n";
 	}

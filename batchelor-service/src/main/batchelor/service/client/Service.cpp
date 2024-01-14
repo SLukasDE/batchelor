@@ -51,10 +51,10 @@ Service::Service(const esl::com::http::client::Connection& aConnection)
 : connection(aConnection)
 { }
 
-schemas::FetchResponse Service::fetchTask(const schemas::FetchRequest& fetchRequest) {
+schemas::FetchResponse Service::fetchTask(const std::string& namespaceId, const schemas::FetchRequest& fetchRequest) {
 	schemas::FetchResponse fetchResponse;
 
-	static const std::string serviceUrl = "fetchTask";
+	static const std::string serviceUrl = "fetchTask/" + namespaceId;
     esl::com::http::client::Request request(serviceUrl, esl::utility::HttpMethod::Type::httpPost, esl::utility::MIME::Type::applicationJson);
     request.addHeader("Accept", esl::utility::MIME::toString(esl::utility::MIME::Type::applicationJson) + "," + esl::utility::MIME::toString(esl::utility::MIME::Type::applicationXml));
 
@@ -91,10 +91,10 @@ schemas::FetchResponse Service::fetchTask(const schemas::FetchRequest& fetchRequ
     return fetchResponse;
 }
 
-std::vector<schemas::TaskStatusHead> Service::getTasks(const std::string& state, const std::string& eventNotAfter, const std::string& eventNotBefore) {
+std::vector<schemas::TaskStatusHead> Service::getTasks(const std::string& namespaceId, const std::string& state, const std::string& eventNotAfter, const std::string& eventNotBefore) {
 	std::vector<schemas::TaskStatusHead> tasks;
 
-	std::string serviceUrl = "tasks";
+	std::string serviceUrl = "tasks/" + namespaceId;
 	{
 		std::string args;
 
@@ -147,10 +147,10 @@ std::vector<schemas::TaskStatusHead> Service::getTasks(const std::string& state,
     return tasks;
 }
 
-std::unique_ptr<schemas::TaskStatusHead> Service::getTask(const std::string& taskId) {
+std::unique_ptr<schemas::TaskStatusHead> Service::getTask(const std::string& namespaceId, const std::string& taskId) {
 	std::unique_ptr<schemas::TaskStatusHead> status;
 
-	std::string serviceUrl = "task/" + taskId;
+	std::string serviceUrl = "task/" + namespaceId + "/" + taskId;
     esl::com::http::client::Request request(serviceUrl, esl::utility::HttpMethod::Type::httpGet, esl::utility::MIME::Type::applicationJson);
     request.addHeader("Accept", esl::utility::MIME::toString(esl::utility::MIME::Type::applicationJson) + "," + esl::utility::MIME::toString(esl::utility::MIME::Type::applicationXml));
 
@@ -187,10 +187,10 @@ std::unique_ptr<schemas::TaskStatusHead> Service::getTask(const std::string& tas
     return status;
 }
 
-schemas::RunResponse Service::runTask(const schemas::RunRequest& runRequest) {
+schemas::RunResponse Service::runTask(const std::string& namespaceId, const schemas::RunRequest& runRequest) {
 	schemas::RunResponse runResponse;
 
-	static const std::string serviceUrl = "task";
+	static const std::string serviceUrl = "task/" + namespaceId;
 
 #if 0
     std::map<std::string, std::string> requestHeaders;
@@ -239,8 +239,8 @@ schemas::RunResponse Service::runTask(const schemas::RunRequest& runRequest) {
     return runResponse;
 }
 
-void Service::sendSignal(const std::string& taskId, const std::string& signal) {
-    static const std::string serviceUrl = "signal/" + taskId + "/" + signal;
+void Service::sendSignal(const std::string& namespaceId, const std::string& taskId, const std::string& signal) {
+    static const std::string serviceUrl = "signal/" + namespaceId + "/" + taskId + "/" + signal;
 
     esl::com::http::client::Request request(serviceUrl, esl::utility::HttpMethod::Type::httpPost, esl::utility::MIME::Type::applicationJson);
 

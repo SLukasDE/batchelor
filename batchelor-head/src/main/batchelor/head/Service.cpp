@@ -26,9 +26,11 @@
 #include <batchelor/service/schemas/Signal.h>
 
 #include <esl/com/http/server/exception/StatusCode.h>
+#include <esl/object/Value.h>
 #include <esl/system/Stacktrace.h>
 #include <esl/utility/CRC32.h>
 #include <esl/utility/MIME.h>
+#include <esl/utility/String.h>
 
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_generators.hpp>
@@ -44,11 +46,17 @@ namespace {
 Logger logger("batchelor::head::Service");
 
 
-service::schemas::RunResponse makeRunResponse(const Dao::Task& task) {
+service::schemas::RunResponse makeRunResponse(const Dao::Task* task) {
 	service::schemas::RunResponse rv;
 
-	rv.taskId = task.taskId;
-	rv.message = batchelor::common::types::State::toString(task.state);
+	if(task) {
+		rv.taskId = task->taskId;
+		rv.message = batchelor::common::types::State::toString(task->state);
+	}
+	else {
+		rv.taskId = "";
+		rv.message = "Event type is not available";
+	}
 
 	return rv;
 }
@@ -111,12 +119,18 @@ Service::Service(const esl::object::Context& aContext, RequestHandler& aRequestH
   requestHandler(aRequestHandler)
 { }
 
-service::schemas::FetchResponse Service::fetchTask(const service::schemas::FetchRequest& fetchRequest) {
-	logger.trace << "fetchTask\n";
+service::schemas::FetchResponse Service::fetchTask(const std::string& namespaceId, const service::schemas::FetchRequest& fetchRequest) {
+	logger.trace << "Service call: \"fetchTask\"\n";
+
+	auto roles = getRoles(namespaceId);
+	if(roles.count(Procedure::Settings::Role::worker) == 0) {
+		throw esl::com::http::server::exception::StatusCode(401);
+	}
+
 	service::schemas::FetchResponse rv;
 
 	for(const auto& taskStatus : fetchRequest.tasks) {
-		std::unique_ptr<Dao::Task> existingTask = getDao().loadTaskByTaskId(taskStatus.taskId);
+		std::unique_ptr<Dao::Task> existingTask = getDao().loadTaskByTaskId(namespaceId, taskStatus.taskId);
 		if(!existingTask) {
 			logger.warn << "Worker sent an update for a non existing task \"" << taskStatus.taskId << "\"\n.";
 			continue;
@@ -144,20 +158,23 @@ service::schemas::FetchResponse Service::fetchTask(const service::schemas::Fetch
 			existingTask->endTS = existingTask->lastHeartbeatTS;
 		}
 
-		getDao().updateTask(*existingTask);
+		getDao().updateTask(namespaceId, *existingTask);
 		requestHandler.onUpdateTask(*existingTask);
 	}
 
 	std::vector<Dao::Task> tasks;
+	std::vector<std::pair<std::string, std::string>> eventTypes;
 	for(const auto eventType : fetchRequest.eventTypes) {
 		if(eventType.available) {
-			std::vector<Dao::Task> eventTypeTasks = getDao().loadTasksByEventTypeAndState(eventType.eventType, batchelor::common::types::State::queued);
+			std::vector<Dao::Task> eventTypeTasks = getDao().loadTasksByEventTypeAndState(namespaceId, eventType.eventType, batchelor::common::types::State::queued);
 			tasks.insert(tasks.end(), eventTypeTasks.begin(), eventTypeTasks.end());
 		}
+		eventTypes.emplace_back(namespaceId, eventType.eventType);
 	}
-	std::sort(std::begin(tasks), std::end(tasks), [](const Dao::Task &a, const Dao::Task &b) {
+	std::sort(std::begin(tasks), std::end(tasks), [](const Dao::Task& a, const Dao::Task& b) {
 		return a.effectivePriority > b.effectivePriority || (a.effectivePriority == b.effectivePriority && a.createdTS < b.createdTS);
 	});
+	getDao().updateEventTypes(eventTypes);
 
 	std::vector<service::schemas::Setting> metrics = getMetrics(fetchRequest.metrics);
 	for(auto& task : tasks) {
@@ -165,7 +182,7 @@ service::schemas::FetchResponse Service::fetchTask(const service::schemas::Fetch
 			task.state = batchelor::common::types::State::running;
 			task.startTS = task.lastHeartbeatTS = std::chrono::system_clock::now();
 			task.metrics = metrics;
-			getDao().updateTask(task);
+			getDao().updateTask(namespaceId, task);
 			requestHandler.onUpdateTask(task);
 
 			service::schemas::RunConfiguration runConfiguration;
@@ -183,8 +200,14 @@ service::schemas::FetchResponse Service::fetchTask(const service::schemas::Fetch
 	return rv;
 }
 
-std::vector<service::schemas::TaskStatusHead> Service::getTasks(const std::string& state, const std::string& eventNotAfterStr, const std::string& eventNotBeforeStr) {
-	logger.trace << "getTasks\n";
+std::vector<service::schemas::TaskStatusHead> Service::getTasks(const std::string& namespaceId, const std::string& state, const std::string& eventNotAfterStr, const std::string& eventNotBeforeStr) {
+	logger.trace << "Service call: \"getTasks\"\n";
+
+	auto roles = getRoles(namespaceId);
+	if(roles.count(Procedure::Settings::Role::readOnly) == 0 && roles.count(Procedure::Settings::Role::execute) == 0) {
+		throw esl::com::http::server::exception::StatusCode(401);
+	}
+
 	std::vector<service::schemas::TaskStatusHead> rv;
 
 	std::chrono::system_clock::time_point eventNotAfter;
@@ -197,7 +220,7 @@ std::vector<service::schemas::TaskStatusHead> Service::getTasks(const std::strin
 		eventNotBefore = batchelor::common::Timestamp::fromJSON(eventNotBeforeStr);
 	}
 
-	std::vector<Dao::Task> tasks = getDao().loadTasks(state, eventNotAfter, eventNotBefore);
+	std::vector<Dao::Task> tasks = getDao().loadTasks(namespaceId, state, eventNotAfter, eventNotBefore);
 	for(const auto& task : tasks) {
 		rv.push_back(taskToTaskStatusHead(task));
 	}
@@ -206,10 +229,16 @@ std::vector<service::schemas::TaskStatusHead> Service::getTasks(const std::strin
 }
 
 
-std::unique_ptr<service::schemas::TaskStatusHead> Service::getTask(const std::string& taskId) {
-	logger.trace << "getTask\n";
+std::unique_ptr<service::schemas::TaskStatusHead> Service::getTask(const std::string& namespaceId, const std::string& taskId) {
+	logger.trace << "Service call: \"getTask\"\n";
+
+	auto roles = getRoles(namespaceId);
+	if(roles.count(Procedure::Settings::Role::readOnly) == 0 && roles.count(Procedure::Settings::Role::execute) == 0) {
+		throw esl::com::http::server::exception::StatusCode(401);
+	}
+
 	std::unique_ptr<service::schemas::TaskStatusHead> rv;
-	std::unique_ptr<Dao::Task> task = getDao().loadTaskByTaskId(taskId);
+	std::unique_ptr<Dao::Task> task = getDao().loadTaskByTaskId(namespaceId, taskId);
 
 	if(task) {
 		rv.reset(new service::schemas::TaskStatusHead);
@@ -219,23 +248,45 @@ std::unique_ptr<service::schemas::TaskStatusHead> Service::getTask(const std::st
 	return rv;
 }
 
-service::schemas::RunResponse Service::runTask(const service::schemas::RunRequest& runRequest) {
-	logger.trace << "runTask\n";
+service::schemas::RunResponse Service::runTask(const std::string& namespaceId, const service::schemas::RunRequest& runRequest) {
+	logger.trace << "Service call: \"runTask\"\n";
+
+	auto roles = getRoles(namespaceId);
+	if(roles.count(Procedure::Settings::Role::execute) == 0) {
+		throw esl::com::http::server::exception::StatusCode(401);
+	}
+
 	service::schemas::RunResponse rv;
 
 	std::uint32_t crc32 = makeCrc32(runRequest);
 
-	std::unique_ptr<Dao::Task> existingTask = getDao().loadLatesTaskByEventTypeAndCrc32(runRequest.eventType, crc32);
+	std::unique_ptr<Dao::Task> existingTask = getDao().loadLatesTaskByEventTypeAndCrc32(namespaceId, runRequest.eventType, crc32);
 	if(existingTask && (existingTask->state == batchelor::common::types::State::queued || existingTask->state == batchelor::common::types::State::running)) {
 		existingTask->priority = runRequest.priority;
 		existingTask->settings = runRequest.settings;
 		existingTask->condition = runRequest.condition;
-		getDao().updateTask(*existingTask);
+		getDao().updateTask(namespaceId, *existingTask);
 		requestHandler.onUpdateTask(*existingTask);
 
-		rv = makeRunResponse(*existingTask);
+		rv = makeRunResponse(existingTask.get());
 	}
 	else {
+		{
+			bool eventTypeAvailable = false;
+			auto availableEventTypes = getDao().loadEventTypes(namespaceId);
+			for(const auto& availableEventType : availableEventTypes) {
+				if(availableEventType == runRequest.eventType) {
+					eventTypeAvailable = true;
+					break;
+				}
+			}
+
+			if(!eventTypeAvailable) {
+				return makeRunResponse(nullptr);
+				//throw esl::com::http::server::exception::StatusCode(404, esl::utility::MIME::Type::applicationJson, "message: Event type '" + runRequest.eventType + "' is not available");
+			}
+		}
+
 		//boost::uuids::uuid taskIdUUID; // initialize uuid
 		static boost::uuids::random_generator rg;
 		boost::uuids::uuid taskIdUUID = rg();
@@ -253,10 +304,10 @@ service::schemas::RunResponse Service::runTask(const service::schemas::RunReques
 #endif
 		task.state = batchelor::common::types::State::Type::queued;
 
-		getDao().saveTask(task);
+		getDao().saveTask(namespaceId, task);
 		requestHandler.onUpdateTask(task);
 
-		rv = makeRunResponse(task);
+		rv = makeRunResponse(&task);
 	}
 
 	//logger.info << "task.createdTS: " << toJSONTimestamp(task.createdTS) << "\n";
@@ -266,15 +317,21 @@ service::schemas::RunResponse Service::runTask(const service::schemas::RunReques
 	return rv;
 }
 
-void Service::sendSignal(const std::string& taskId, const std::string& signal) {
-	logger.trace << "sendSignal\n";
-	std::unique_ptr<Dao::Task> task = getDao().loadTaskByTaskId(taskId);
+void Service::sendSignal(const std::string& namespaceId, const std::string& taskId, const std::string& signal) {
+	logger.trace << "Service call: \"sendSignal\"\n";
+
+	auto roles = getRoles(namespaceId);
+	if(roles.count(Procedure::Settings::Role::execute) == 0) {
+		throw esl::com::http::server::exception::StatusCode(401);
+	}
+
+	std::unique_ptr<Dao::Task> task = getDao().loadTaskByTaskId(namespaceId, taskId);
 	if(!task) {
 		throw esl::com::http::server::exception::StatusCode(404, esl::utility::MIME::Type::applicationJson, "{}");
 	}
 
 	task->signals.push_back(signal);
-	getDao().updateTask(*task);
+	getDao().updateTask(namespaceId, *task);
 	requestHandler.onUpdateTask(*task);
 }
 
@@ -296,6 +353,20 @@ Dao& Service::getDao() const {
 	}
 
 	return *dao;
+}
+
+std::set<Procedure::Settings::Role> Service::getRoles(const std::string& namespaceId) {
+	auto rolesByNamespaceValuePtr = context.findObject<esl::object::Value<std::map<std::string, std::set<Procedure::Settings::Role>>>>("rolesByNamespaceValue");
+	if(!rolesByNamespaceValuePtr) {
+		return std::set<Procedure::Settings::Role>{Procedure::Settings::Role::execute, Procedure::Settings::Role::readOnly, Procedure::Settings::Role::worker};
+	}
+
+	auto iter = rolesByNamespaceValuePtr->get().find(namespaceId);
+	if(iter != rolesByNamespaceValuePtr->get().end()) {
+		return iter->second;
+	}
+
+	return std::set<Procedure::Settings::Role>();
 }
 
 } /* namespace head */

@@ -20,6 +20,7 @@
 #define BATCHELOR_HEAD_SERVICE_H_
 
 #include <batchelor/head/Dao.h>
+#include <batchelor/head/Procedure.h>
 #include <batchelor/head/RequestHandler.h>
 
 #include <batchelor/service/Service.h>
@@ -46,18 +47,19 @@ public:
 	Service(const esl::object::Context& context, RequestHandler& requestHandler);
 
 	// used by worker
-	service::schemas::FetchResponse fetchTask(const service::schemas::FetchRequest& fetchRequest) override;
+	service::schemas::FetchResponse fetchTask(const std::string& namespaceId, const service::schemas::FetchRequest& fetchRequest) override;
 
-	std::vector<service::schemas::TaskStatusHead> getTasks(const std::string& state, const std::string& eventNotAfter, const std::string& eventNotBefore) override;
+	std::vector<service::schemas::TaskStatusHead> getTasks(const std::string& namespaceId, const std::string& state, const std::string& eventNotAfter, const std::string& eventNotBefore) override;
 
 	// used by cli
-	std::unique_ptr<service::schemas::TaskStatusHead> getTask(const std::string& taskId) override;
-	service::schemas::RunResponse runTask(const service::schemas::RunRequest& runRequest) override;
-	void sendSignal(const std::string& taskId, const std::string& signal) override;
+	std::unique_ptr<service::schemas::TaskStatusHead> getTask(const std::string& namespaceId, const std::string& taskId) override;
+	service::schemas::RunResponse runTask(const std::string& namespaceId, const service::schemas::RunRequest& runRequest) override;
+	void sendSignal(const std::string& namespaceId, const std::string& taskId, const std::string& signal) override;
 
 private:
 	esl::database::Connection& getDBConnection() const;
 	Dao& getDao() const;
+	std::set<Procedure::Settings::Role> getRoles(const std::string& namespaceId);
 
 	const esl::object::Context& context;
 	RequestHandler& requestHandler;

@@ -21,6 +21,7 @@
 #include <batchelor/worker/Procedure.h>
 #include <batchelor/worker/TaskFailed.h>
 
+#include <batchelor/common/Timestamp.h>
 #include <batchelor/common/types/State.h>
 
 #include <batchelor/service/client/Service.h>
@@ -34,6 +35,10 @@
 #include <esl/system/Stacktrace.h>
 #include <esl/utility/String.h>
 
+#include <boost/uuid/uuid.hpp>
+#include <boost/uuid/uuid_generators.hpp>
+#include <boost/uuid/uuid_io.hpp>
+
 #include <set>
 #include <stdexcept>
 
@@ -43,6 +48,13 @@ namespace worker {
 
 namespace {
 Logger logger("batchelor::worker::Procedure");
+boost::uuids::random_generator rg;
+}
+
+Procedure::Settings::Settings() {
+	// TODO: Check if there is an environment variable set to specify the worker-id
+	boost::uuids::uuid taskIdUUID = rg();
+	workerId = boost::uuids::to_string(taskIdUUID);
 }
 
 Procedure::Settings::Settings(const std::vector<std::pair<std::string, std::string>>& settings) {
@@ -61,19 +73,42 @@ Procedure::Settings::Settings(const std::vector<std::pair<std::string, std::stri
 				maximumTasksRunning = esl::utility::String::toNumber<std::size_t>(setting.second);
 			}
 			catch(const std::exception& e) {
-	            throw esl::system::Stacktrace::add(std::runtime_error("Invalid value \"" + setting.second + "\" for attribute '" + setting.first + "'."));
+	            throw esl::system::Stacktrace::add(std::runtime_error("Invalid value \"" + setting.second + "\" for attribute '" + setting.first + "'." + e.what()));
+			}
+		}
+
+		else if(setting.first == "idle-timeout") {
+			if(idleTimeout.count() > 0) {
+	            throw esl::system::Stacktrace::add(std::runtime_error("Multiple definition of attribute '" + setting.first + "'."));
+			}
+
+			try {
+				idleTimeout = common::Timestamp::toDuration(setting.second);
+			}
+			catch(const std::exception& e) {
+	            throw esl::system::Stacktrace::add(std::runtime_error("Invalid value \"" + setting.second + "\" for attribute '" + setting.first + "'." + e.what()));
 			}
 		}
 
 		else if(setting.first == "task-factory-id") {
 			if(taskFactoryIds.insert(setting.second).second == false) {
-	            throw esl::system::Stacktrace::add(std::runtime_error("Multiple definition of attribute \"task-factory-id\"='" + setting.second + "'."));
+	            throw esl::system::Stacktrace::add(std::runtime_error("Multiple definition of attribute \"" + setting.first + "\"='" + setting.second + "'."));
 			}
 		}
 
 		else if(setting.first == "batchelor-head-server-id") {
 			if(connectionFactoryIds.insert(setting.second).second == false) {
-	            throw esl::system::Stacktrace::add(std::runtime_error("Multiple definition of attribute \"batchelor-head-server-id\"='" + setting.second + "'."));
+	            throw esl::system::Stacktrace::add(std::runtime_error("Multiple definition of attribute \"" + setting.first + "\"='" + setting.second + "'."));
+			}
+		}
+
+		else if(setting.first == "worker-id") {
+			if(!workerId.empty()) {
+	            throw esl::system::Stacktrace::add(std::runtime_error("Multiple definition of attribute \"" + setting.first + "\"='" + setting.second + "'."));
+			}
+			workerId = setting.second;
+			if(workerId.empty()) {
+	            throw esl::system::Stacktrace::add(std::runtime_error("Invalid value \"" + setting.second + "\" for attribute '" + setting.first + "'."));
 			}
 		}
 
@@ -81,6 +116,12 @@ Procedure::Settings::Settings(const std::vector<std::pair<std::string, std::stri
 			throw esl::system::Stacktrace::add(std::runtime_error("Key \"" + setting.first + "\" is unknown"));
 		}
     }
+
+	if(workerId.empty()) {
+		// TODO: Check if there is an environment variable set to specify the worker-id
+		boost::uuids::uuid taskIdUUID = rg();
+		workerId = boost::uuids::to_string(taskIdUUID);
+	}
 }
 
 Procedure::InitializedSettings::InitializedSettings(esl::object::Context& context, const Settings& settings) {
@@ -114,7 +155,10 @@ Procedure::~Procedure() {
 }
 
 void Procedure::internalProcedureRun(esl::object::Context& context) {
-	/* ************* *
+    idleTimeAt = std::chrono::steady_clock::now() + settings.idleTimeout;
+	logger.debug << "Idle timeout:" << settings.idleTimeout.count() << "\n";
+
+    /* ************* *
 	 *      run      *
 	 * ************* */
 	std::unique_lock<std::mutex> lockNotifyMutex(notifyMutex);
@@ -122,7 +166,7 @@ void Procedure::internalProcedureRun(esl::object::Context& context) {
 	bool doWait = false;
 	while(true) {
 		if(doWait) {
-			notifyCV.wait_for(lockNotifyMutex, std::chrono::milliseconds(5000));
+			notifyCV.wait_for(lockNotifyMutex, settings.requestInterval);
 		}
 		if(signalsReceived > signalsProcessed) {
 			++signalsProcessed;
@@ -136,6 +180,11 @@ void Procedure::internalProcedureRun(esl::object::Context& context) {
 			}
 		}
 		doWait = !runResilient();
+
+		if(settings.idleTimeout.count() > 0 && std::chrono::steady_clock::now() > idleTimeAt) {
+			logger.info << "Idle timeout occurred.\n";
+			return;
+		}
 
 		//std::cerr << "someone set stopThread to " << stopThread << ", taskByTaskId.size() == " << taskByTaskId.size() << "\n";
 		if(signalsReceived > 0 && taskByTaskId.empty()) {
@@ -187,7 +236,7 @@ bool Procedure::runResilient() {
 	        std::cerr << "NetworkError occurred: " << e.what() << "\n";
 			httpConnectionFactory = nullptr;
 		}
-		/* It is gewollt to stop the application, if an exception occures.
+		/* It is intended to stop the application, if an exception occures.
 		 * (maybe there is a DB error, serialization error or other std::runtime_error)
 		 * But if there is an Network-Error, then we want to retry with another connection factory */
 #if 0
@@ -242,6 +291,8 @@ std::cout << "Task " << task.first << " finished with state \"" << taskStatusWor
 	}
 
 
+	fetchRequest.workerId = settings.workerId;
+
 	/* prepare list of metrics for transmission */
 
 	std::vector<std::pair<std::string, std::string>> metrics = getCurrentMetrics();
@@ -267,7 +318,7 @@ std::cout << "Task " << task.first << " finished with state \"" << taskStatusWor
 	/*********************************
 	 * Perform the fetchTask request *
 	 *********************************/
-	service::schemas::FetchResponse fetchResponse = client.fetchTask(fetchRequest);
+	service::schemas::FetchResponse fetchResponse = client.fetchTask(settings.namespaceId, fetchRequest);
 
 
 	/* send signals to tasks */
@@ -336,6 +387,10 @@ std::cout << "Task " << runConfiguration.taskId << " created for event type \"" 
 
 		taskByTaskId.insert(std::make_pair(runConfiguration.taskId, std::move(task)));
 		actionReceived = true;
+	}
+
+	if(tasksRunning > 0 || actionReceived) {
+	    idleTimeAt = std::chrono::steady_clock::now() + settings.idleTimeout;
 	}
 
 	return actionReceived;

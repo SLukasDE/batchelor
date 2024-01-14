@@ -33,9 +33,9 @@ namespace args {
 
 class Config {
 public:
-	Config(esl::object::Context& context, Procedure::Settings& settings, int argc, const char* argv[]);
-
 	static void printUsage();
+
+	Config(esl::object::Context& context, Procedure::Settings& settings, int argc, const char* argv[]);
 
 	const std::vector<std::string>& getConfigFiles() const noexcept;
 
@@ -61,6 +61,7 @@ private:
 	void setCommand(const std::string& commandStr);
 	const Command& getCommand() const;
 
+	void setNamespaceId(const char* namespaceId);
 	void setEventType(const char* eventType);
 	void setPriority(const char* priority);
 	void addSetting(const char* key, const char* value);

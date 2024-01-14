@@ -34,6 +34,8 @@ public:
 
 	static std::string toString(const std::chrono::time_point<std::chrono::system_clock>& time_point);
 	static std::chrono::time_point<std::chrono::system_clock> fromString(const std::string& str);
+
+	static std::chrono::milliseconds toDuration(const std::string& str);
 };
 
 } /* namespace common */

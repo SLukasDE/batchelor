@@ -49,7 +49,7 @@ TaskFactory::TaskFactory(Settings aSettings)
 std::unique_ptr<plugin::TaskFactory> TaskFactory::create(const std::vector<std::pair<std::string, std::string>>& aSettings) {
 	Settings settings;
 
-	bool hasMetricsPolicy = false;
+	//bool hasMetricsPolicy = false;
 	bool hasArgs = false;
 	bool hasArgsFlag = false;
 	bool hasEnvFlagGlobal = false;
@@ -57,7 +57,28 @@ std::unique_ptr<plugin::TaskFactory> TaskFactory::create(const std::vector<std::
 	bool hasCdFlag = false;
 
 	for(const auto& setting : aSettings) {
-		if(setting.first == "maximum-tasks-running") {
+		if(setting.first.size() > 18 && setting.first.substr(0, 18) == "resource-required.") {
+			std::string key = setting.first.substr(18);
+			int value = 0;
+
+			try {
+				value = std::stoi(setting.second);
+			}
+			catch(const std::invalid_argument& e) {
+				throw std::runtime_error("Invalid value \"" + setting.second + "\" for parameter \"" + setting.first + "\"");
+			}
+			catch(const std::out_of_range& e) {
+				throw std::runtime_error("Value \"" + setting.second + "\" for parameter \"" + setting.first + "\" is out of range.");
+			}
+			if(value <= 0) {
+				throw std::runtime_error("Value for parameter \"" + setting.first + "\" must be greater than 0 but it is \"" + setting.second + "\"");
+			}
+
+			if(settings.resourcesRequired.insert(std::make_pair(key, value)).second == false) {
+				throw std::runtime_error("Multiple definition of parameter \"" + setting.first + "\"");
+			}
+		}
+		else if(setting.first == "maximum-tasks-running") {
 		    //<setting key="maximum-tasks-running" value="3"/>
 			if(settings.maximumTasksRunning != 0) {
 				throw std::runtime_error("Multiple definition of parameter \"" + setting.first + "\"");
@@ -77,6 +98,7 @@ std::unique_ptr<plugin::TaskFactory> TaskFactory::create(const std::vector<std::
 			}
 			settings.maximumTasksRunning = static_cast<std::size_t>(maximumJobsRunning);
 		}
+		/*
 		else if(setting.first == "metrics-policy") {
 			if(hasMetricsPolicy) {
 				throw std::runtime_error("Multiple definition of attribute \"metrics-policy\".");
@@ -97,6 +119,25 @@ std::unique_ptr<plugin::TaskFactory> TaskFactory::create(const std::vector<std::
 		else if(setting.first == "metric") {
 			settings.metrics.insert(setting.second);
 		}
+		*/
+		else if(setting.first == "outfile") {
+			if(!settings.outfile.empty()) {
+				throw std::runtime_error("Multiple definition of parameter \"" + setting.first + "\".");
+			}
+			settings.outfile = setting.second;
+			if(setting.second.empty()) {
+				throw std::runtime_error("Invalid value \"" + setting.second + "\" for parameter \"" + setting.first + "\"");
+			}
+		}
+		else if(setting.first == "errfile") {
+			if(!settings.errfile.empty()) {
+				throw std::runtime_error("Multiple definition of parameter \"" + setting.first + "\".");
+			}
+			settings.errfile = setting.second;
+			if(setting.second.empty()) {
+				throw std::runtime_error("Invalid value \"" + setting.second + "\" for parameter \"" + setting.first + "\"");
+			}
+		}
 		else if(setting.first == "args") {
 		    //<setting key="args" value="--propertyId=Bla --propertyFile=/wxx/secret/property.cfg"/>
 			if(hasArgs) {
@@ -112,9 +153,11 @@ std::unique_ptr<plugin::TaskFactory> TaskFactory::create(const std::vector<std::
 			}
 			hasArgsFlag = true;
 			if(setting.second == "override") {
+				// same as "argsFlag = Flag::extend"
 				settings.argsFlag = Flag::override;
 			}
 			else if(setting.second == "extend") {
+				// same as "argsFlag = Flag::override"
 				settings.argsFlag = Flag::extend;
 			}
 			else if(setting.second == "fixed") {
@@ -247,10 +290,22 @@ std::unique_ptr<plugin::TaskFactory> TaskFactory::create(const std::vector<std::
 	return std::unique_ptr<plugin::TaskFactory>(new TaskFactory(std::move(settings)));
 }
 
-bool TaskFactory::isBusy() {
+const std::map<std::string, int>& TaskFactory::getResourcesRequired() const {
+	return settings.resourcesRequired;
+}
+
+bool TaskFactory::isBusy(const std::map<std::string, int>& resourcesAvailable) {
 	if(settings.maximumTasksRunning > 0 && tasksRunning >= settings.maximumTasksRunning) {
 		return true;
 	}
+
+	for(const auto& resourceRequired : settings.resourcesRequired) {
+		auto resourceAvailable = resourcesAvailable.find(resourceRequired.first);
+		if(resourceAvailable == resourcesAvailable.end() || resourceAvailable->second >= resourceRequired.second) {
+			return true;
+		}
+	}
+
 	return false;
 }
 

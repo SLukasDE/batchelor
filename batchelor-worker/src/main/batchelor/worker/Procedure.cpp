@@ -16,6 +16,7 @@
  * License along with Batchelor.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <batchelor/worker/AliveRequestHandler.h>
 #include <batchelor/worker/Logger.h>
 #include <batchelor/worker/plugin/Task.h>
 #include <batchelor/worker/Procedure.h>
@@ -31,6 +32,7 @@
 
 #include <esl/com/http/client/ConnectionFactory.h>
 #include <esl/com/http/client/exception/NetworkError.h>
+#include <esl/com/http/server/MHDSocket.h>
 #include <esl/plugin/Registry.h>
 #include <esl/system/Stacktrace.h>
 #include <esl/utility/String.h>
@@ -39,6 +41,7 @@
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
 
+#include <algorithm>
 #include <set>
 #include <stdexcept>
 
@@ -49,16 +52,88 @@ namespace worker {
 namespace {
 Logger logger("batchelor::worker::Procedure");
 boost::uuids::random_generator rg;
+AliveRequestHandler aliveRequestHandler;
+
+class ScopeGuard {
+public:
+	ScopeGuard(std::function<void()> aLambda)
+	: lambda(aLambda),
+	  empty(false)
+	{ }
+
+	ScopeGuard(const ScopeGuard &) = delete;
+
+	ScopeGuard(ScopeGuard && other)
+	: lambda(std::move(other.lambda)),
+	  empty(false)
+	{
+		other.empty = true;
+	}
+
+	~ScopeGuard() {
+		if(!empty) {
+			lambda();
+		}
+	}
+
+	ScopeGuard & operator=(const ScopeGuard &) = delete;
+
+	ScopeGuard & operator=(ScopeGuard && other) {
+		lambda = std::move(other.lambda);
+		empty = false;
+		other.empty = true;
+		return *this;
+	}
+
+	void clear() {
+		empty = true;
+	}
+
+private:
+	std::function<void()> lambda;
+    bool empty = true;
+};
+
+std::map<std::string, int> substractResources(std::map<std::string, int> resourcesAvailable, const std::map<std::string, int>& resourcesAllocated) {
+	for(const auto& resourceAllocated : resourcesAllocated) {
+		auto availableIter = resourcesAvailable.insert(std::make_pair(resourceAllocated.first, 0));
+		availableIter.first->second = std::max<int>(0, availableIter.first->second - resourceAllocated.second);
+	}
+
+	return resourcesAvailable;
+}
 }
 
 Procedure::Settings::Settings() {
-	// TODO: Check if there is an environment variable set to specify the worker-id
 	boost::uuids::uuid taskIdUUID = rg();
 	workerId = boost::uuids::to_string(taskIdUUID);
 }
 
 Procedure::Settings::Settings(const std::vector<std::pair<std::string, std::string>>& settings) {
     for(const auto& setting : settings) {
+		/*
+		if(setting.first.size() > 18 && setting.first.substr(0, 18) == "resource-available") {
+			std::string key = setting.first.substr(18);
+			float value = 0;
+
+			try {
+				value = std::stof(setting.second);
+			}
+			catch(const std::invalid_argument& e) {
+				throw std::runtime_error("Invalid value \"" + setting.second + "\" for parameter \"" + setting.first + "\"");
+			}
+			catch(const std::out_of_range& e) {
+				throw std::runtime_error("Value \"" + setting.second + "\" for parameter \"" + setting.first + "\" is out of range.");
+			}
+			if(value <= 0) {
+				throw std::runtime_error("Value for parameter \"" + setting.first + "\" must be greater than 0 but it is \"" + setting.second + "\"");
+			}
+
+			if(resourcesAvailable.insert(std::make_pair(key, value)).second == false) {
+				throw std::runtime_error("Multiple definition of parameter \"" + setting.first + "\"");
+			}
+		}
+		*/
 		if(setting.first.size() > 7 && setting.first.substr(0, 7) == "metric.") {
 			std::string key = setting.first.substr(7);
 			metrics.emplace_back(key, setting.second);
@@ -84,6 +159,19 @@ Procedure::Settings::Settings(const std::vector<std::pair<std::string, std::stri
 
 			try {
 				idleTimeout = common::Timestamp::toDuration(setting.second);
+			}
+			catch(const std::exception& e) {
+	            throw esl::system::Stacktrace::add(std::runtime_error("Invalid value \"" + setting.second + "\" for attribute '" + setting.first + "'." + e.what()));
+			}
+		}
+
+		else if(setting.first == "available-timeout") {
+			if(availableTimeout.count() > 0) {
+	            throw esl::system::Stacktrace::add(std::runtime_error("Multiple definition of attribute '" + setting.first + "'."));
+			}
+
+			try {
+				availableTimeout = common::Timestamp::toDuration(setting.second);
 			}
 			catch(const std::exception& e) {
 	            throw esl::system::Stacktrace::add(std::runtime_error("Invalid value \"" + setting.second + "\" for attribute '" + setting.first + "'." + e.what()));
@@ -130,6 +218,40 @@ Procedure::InitializedSettings::InitializedSettings(esl::object::Context& contex
 		if(taskFactroyByEventType.emplace(taskFactoryId, std::ref(taskFactory)).second == false) {
 			throw esl::system::Stacktrace::add(std::runtime_error("Multiple definition of task factory id \"" + taskFactoryId + "\"."));
 		}
+
+		const std::map<std::string, int>& resourcesRequired = taskFactory.getResourcesRequired();
+		for(const auto& resourceRequired : resourcesRequired) {
+			if(resourcesAvailable.find(resourceRequired.first) != resourcesAvailable.end()) {
+				continue;
+			}
+
+			bool metricFound = false;
+			for(const auto metric : settings.metrics) {
+				if(metric.first == resourceRequired.first) {
+					metricFound = true;
+
+					int value = 0;
+					try {
+						value = std::stoi(metric.second);
+					}
+					catch(const std::invalid_argument& e) {
+			            throw esl::system::Stacktrace::add(std::runtime_error("Task factory \"" + taskFactoryId + "\" requires resource '" + resourceRequired.first + "' with invalid value \"" + metric.second + "\". " + e.what()));
+					}
+					catch(const std::out_of_range& e) {
+			            throw esl::system::Stacktrace::add(std::runtime_error("Task factory \"" + taskFactoryId + "\" requires resource '" + resourceRequired.first + "' with a value \"" + metric.second + "\" that is out of range. " + e.what()));
+					}
+					if(value == 0) {
+			            throw esl::system::Stacktrace::add(std::runtime_error("Task factory \"" + taskFactoryId + "\" requires resource '" + resourceRequired.first + "' with a value \"" + metric.second + "\" smaller than 0."));
+					}
+					resourcesAvailable[resourceRequired.first] = value;
+
+					break;
+				}
+			}
+			if(metricFound == false) {
+	            throw esl::system::Stacktrace::add(std::runtime_error("Task factory \"" + taskFactoryId + "\" requires a non existing resource '" + resourceRequired.first + "'."));
+			}
+		}
 	}
 
 	for(const auto& connectionId : settings.connectionFactoryIds) {
@@ -148,19 +270,46 @@ Procedure::Procedure(const Settings& aSettings)
 	if(settings.connectionFactoryIds.empty()) {
 		throw std::runtime_error("No connections defined");
 	}
+	if(settings.alivePort > 0) {
+		std::vector<std::pair<std::string, std::string>> mhdSettings;
+		mhdSettings.emplace_back("port", std::to_string(settings.alivePort));
+		mhdSettings.emplace_back("https", "false");
+		socket = esl::com::http::server::MHDSocket::createNative(esl::com::http::server::MHDSocket::Settings(mhdSettings));
+	}
 }
 
 Procedure::~Procedure() {
 	procedureCancel();
+	socketMutex.lock();
 }
 
 void Procedure::internalProcedureRun(esl::object::Context& context) {
     idleTimeAt = std::chrono::steady_clock::now() + settings.idleTimeout;
+    unavailableTimeAt = std::chrono::steady_clock::now() + settings.availableTimeout;
+
 	logger.debug << "Idle timeout:" << settings.idleTimeout.count() << "\n";
+	logger.debug << "Available timeout:" << settings.availableTimeout.count() << "\n";
+
+	if(socket) {
+		socketMutex.lock();
+		ScopeGuard scopeGuard([&]() {
+			socketMutex.unlock();
+		});
+		socket->listen(aliveRequestHandler, [&]{
+			socketMutex.unlock();
+		});
+		scopeGuard.clear();
+	}
 
     /* ************* *
 	 *      run      *
 	 * ************* */
+	ScopeGuard scopeGuard([&]() {
+		if(socket) {
+			socket->release();
+		}
+	});
+
 	std::unique_lock<std::mutex> lockNotifyMutex(notifyMutex);
 
 	bool doWait = false;
@@ -184,6 +333,13 @@ void Procedure::internalProcedureRun(esl::object::Context& context) {
 		if(settings.idleTimeout.count() > 0 && std::chrono::steady_clock::now() > idleTimeAt) {
 			logger.info << "Idle timeout occurred.\n";
 			return;
+		}
+
+		if(availableTimeoutOccurred) {
+			logger.info << "Available timeout occurred.\n";
+			if(taskByTaskId.empty()) {
+				return;
+			}
 		}
 
 		//std::cerr << "someone set stopThread to " << stopThread << ", taskByTaskId.size() == " << taskByTaskId.size() << "\n";
@@ -236,7 +392,7 @@ bool Procedure::runResilient() {
 	        std::cerr << "NetworkError occurred: " << e.what() << "\n";
 			httpConnectionFactory = nullptr;
 		}
-		/* It is intended to stop the application, if an exception occures.
+		/* It is intended to stop the application, if an exception occurs.
 		 * (maybe there is a DB error, serialization error or other std::runtime_error)
 		 * But if there is an Network-Error, then we want to retry with another connection factory */
 #if 0
@@ -251,7 +407,8 @@ bool Procedure::runResilient() {
 #endif
 	} while(firstConnectionFactory != nextConnectionFactory);
 
-    std::cerr << "Sleep...\n";
+    logger.debug << "Sleep...\n";
+
 	return false;
 }
 
@@ -268,7 +425,9 @@ bool Procedure::run() {
 
 	/* prepare task status list and count running threads */
 
+	/* calculate resources */
 	std::size_t tasksRunning = 0;
+	std::map<std::string, int> resourcesAllocated;
 	std::vector<std::string> notRunningTaskIDs;
 	for(const auto& task : taskByTaskId) {
 		service::schemas::TaskStatusWorker taskStatusWorker;
@@ -283,13 +442,15 @@ bool Procedure::run() {
 
 		if(taskStatus.state == common::types::State::running) {
 			++tasksRunning;
+			for(const auto& resourceAllocated : taskStatus.resourcesAllocated) {
+				resourcesAllocated[resourceAllocated.first] += resourceAllocated.second;
+			}
 		}
 		else {
-std::cout << "Task " << task.first << " finished with state \"" << taskStatusWorker.state << "\"\n";
 			notRunningTaskIDs.push_back(task.first);
 		}
 	}
-
+	std::map<std::string, int> resourcesAvailable = substractResources(initializedSettings->resourcesAvailable, resourcesAllocated);
 
 	fetchRequest.workerId = settings.workerId;
 
@@ -297,19 +458,28 @@ std::cout << "Task " << task.first << " finished with state \"" << taskStatusWor
 
 	std::vector<std::pair<std::string, std::string>> metrics = getCurrentMetrics();
 	for(const auto& metric : metrics) {
-		fetchRequest.metrics.push_back(service::schemas::Setting::make(metric.first, metric.second));
+		auto iter = resourcesAvailable.find(metric.first);
+		if(iter == resourcesAvailable.end()) {
+			fetchRequest.metrics.push_back(service::schemas::Setting::make(metric.first, metric.second));
+		}
+		else {
+			fetchRequest.metrics.push_back(service::schemas::Setting::make(metric.first, std::to_string(iter->second)));
+		}
 	}
 	fetchRequest.metrics.push_back(service::schemas::Setting::make("TASKS_RUNNING", std::to_string(tasksRunning)));
 
 
 	/* prepare the list of available event types and if they are available to create a new task */
 
-	if(signalsReceived == 0 && initializedSettings) {
+	if(settings.availableTimeout.count() > 0 && std::chrono::steady_clock::now() > unavailableTimeAt) {
+		availableTimeoutOccurred = true;
+	}
+	else if(signalsReceived == 0 && initializedSettings) {
 		for(const auto& taskFactory : initializedSettings->taskFactroyByEventType) {
 			service::schemas::EventTypeAvailable eventTypeAvailable;
 
 			eventTypeAvailable.eventType = taskFactory.first;
-			eventTypeAvailable.available = (settings.maximumTasksRunning == 0 || settings.maximumTasksRunning > tasksRunning) && !taskFactory.second.get().isBusy();
+			eventTypeAvailable.available = (settings.maximumTasksRunning == 0 || settings.maximumTasksRunning > tasksRunning) && !taskFactory.second.get().isBusy(resourcesAvailable);
 
 			fetchRequest.eventTypes.push_back(eventTypeAvailable);
 		}
@@ -329,7 +499,6 @@ std::cout << "Task " << task.first << " finished with state \"" << taskStatusWor
 			logger.warn << "Received a message to send a signal to an unknown task \"" << signal.taskId << "\"\n";
 		}
 		else if(iter->second->getStatus().state == common::types::State::running) {
-std::cout << "Signal \"" << signal.signal << "\" received for task " << signal.taskId << ".\n";
 			iter->second->sendSignal(signal.signal);
 			actionReceived = true;
 		}
@@ -360,7 +529,7 @@ std::cout << "Signal \"" << signal.signal << "\" received for task " << signal.t
 			task = iter->second.get().createTask(notifyCV, notifyMutex, getCurrentMetrics(runConfiguration), runConfiguration);
 		}
 		catch(const std::exception& e) {
-std::cerr << "Could not create task " << runConfiguration.taskId << " for event type \"" << runConfiguration.eventType << "\" because exception occured with message \"" << e.what() << "\".\n";
+			logger.warn << "Could not create task " << runConfiguration.taskId << " for event type \"" << runConfiguration.eventType << "\" because exception occured with message \"" << e.what() << "\".\n";
 			plugin::Task::Status taskStatus;
 
 			taskStatus.state = common::types::State::Type::signaled;
@@ -372,7 +541,7 @@ std::cerr << "Could not create task " << runConfiguration.taskId << " for event 
 		catch(...) { }
 
 		if(!task) {
-std::cerr << "Could not create task " << runConfiguration.taskId << " for event type \"" << runConfiguration.eventType << "\".\n";
+			logger.warn << "Could not create task " << runConfiguration.taskId << " for event type \"" << runConfiguration.eventType << "\".\n";
 			plugin::Task::Status taskStatus;
 
 			taskStatus.state = common::types::State::Type::signaled;
@@ -381,9 +550,6 @@ std::cerr << "Could not create task " << runConfiguration.taskId << " for event 
 
 			task.reset(new TaskFailed(std::move(taskStatus)));
 		}
-else {
-std::cout << "Task " << runConfiguration.taskId << " created for event type \"" << runConfiguration.eventType << "\".\n";
-}
 
 		taskByTaskId.insert(std::make_pair(runConfiguration.taskId, std::move(task)));
 		actionReceived = true;

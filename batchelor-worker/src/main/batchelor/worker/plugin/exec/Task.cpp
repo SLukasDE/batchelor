@@ -16,6 +16,7 @@
  * License along with Batchelor.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <batchelor/common/config/xml/Setting.h>
 #include <batchelor/common/types/State.h>
 
 #include <batchelor/worker/Logger.h>
@@ -41,58 +42,6 @@ namespace plugin {
 namespace exec {
 namespace {
 Logger logger("batchelor::worker::plugin::exec::Task");
-
-std::string evaluate(const std::string& expression, const std::map<std::string, std::string>& metrics) {
-	std::string value;
-	std::string var;
-	enum {
-		intro,
-		begin,
-		end
-	} state = end;
-
-	for(std::size_t i=0; i<expression.size(); ++i) {
-		if(state == begin) {
-			if(expression.at(i) == '}') {
-				auto iter = metrics.find(var);
-				const char* val = std::getenv(var.c_str());
-
-				if(iter != metrics.end()) {
-					value += iter->second;
-				}
-				else if(val) {
-					value += val;
-				}
-				else {
-					throw std::runtime_error("No value available for variable \"" + var + "\" in expression: \"" + expression + "\"");
-				}
-				state = end;
-				var.clear();
-			}
-			else {
-				var += expression.at(i);
-			}
-		}
-		else if(state == intro) {
-			if(expression.at(i) == '{') {
-				state = begin;
-			}
-			else {
-				throw std::runtime_error("Syntax error in expression: \"" + expression + "\"");
-			}
-		}
-		else {
-			if(expression.at(i) == '$') {
-				state = intro;
-			}
-			else {
-				value += expression.at(i);
-			}
-		}
-	}
-
-	return value;
-}
 }
 
 Task::Task(TaskFactory& aTaskFactoryExec, std::condition_variable& aNotifyCV, std::mutex& notifyMutex, const std::vector<std::pair<std::string, std::string>>& aMetrics, const TaskFactory::Settings& factorySettings, const service::schemas::RunConfiguration& runConfiguration)
@@ -110,11 +59,19 @@ Task::Task(TaskFactory& aTaskFactoryExec, std::condition_variable& aNotifyCV, st
 			if(hasArgs) {
 				throw std::runtime_error("Multiple definition of parameter \"" + setting.key + "\".");
 			}
-			if(factorySettings.argsFlag == TaskFactory::Flag::fixed) {
-				throw esl::system::Stacktrace::add(std::runtime_error("It is not allowed to override or extend parameter \"" + setting.key + "\""));
-			}
 			hasArgs = true;
-			settings.args = setting.value;
+
+			switch(factorySettings.argsFlag) {
+			case TaskFactory::Flag::override:
+				settings.args = setting.value;
+				break;
+			case TaskFactory::Flag::extend:
+				settings.args += " " + setting.value;
+				break;
+			case TaskFactory::Flag::fixed:
+				throw esl::system::Stacktrace::add(std::runtime_error("It is not allowed to override or extend parameter \"" + setting.key + "\""));
+				break;
+			}
 		}
 		else if(setting.key == "env") {
 		    //<setting key="env" value="JOBID=${TASK_ID}"/>
@@ -174,11 +131,15 @@ Task::Task(TaskFactory& aTaskFactoryExec, std::condition_variable& aNotifyCV, st
 		}
 	}
 
+
+	status.resourcesAllocated = factorySettings.resourcesRequired;
+
 	/* now we replace the parameters in the envs and args */
 	const std::map<std::string, std::string> metrics(aMetrics.begin(), aMetrics.end());
 
+#if 0
 	// ToDo: Does not work with quotes so far!
-	std::vector<std::string> argsList = esl::utility::String::split(settings.args, ' ', true);
+	// std::vector<std::string> argsList = esl::utility::String::split(settings.args, ' ', true);
 	settings.args.clear();
 	for(const auto& arg : argsList) {
 		if(!settings.args.empty()) {
@@ -186,11 +147,17 @@ Task::Task(TaskFactory& aTaskFactoryExec, std::condition_variable& aNotifyCV, st
 		}
 		settings.args += evaluate(arg, metrics);
 	}
+#else
+	settings.args = common::config::xml::Setting::generalEvaluate(settings.args, true, metrics);
+
+#endif
 
 	for(auto& env : settings.envs) {
-		env.second = evaluate(env.second, metrics);
+		env.second = common::config::xml::Setting::generalEvaluate(env.second, true, metrics);
 	}
 
+	std::string outfile = common::config::xml::Setting::generalEvaluate(factorySettings.outfile, true, metrics);
+	std::string errfile = common::config::xml::Setting::generalEvaluate(factorySettings.errfile, true, metrics);
 
 
 	if(settings.cd.empty()) {
@@ -225,8 +192,17 @@ Task::Task(TaskFactory& aTaskFactoryExec, std::condition_variable& aNotifyCV, st
 	boost::filesystem::create_directories(settings.cd);
 	process->setWorkingDir(settings.cd);
 
+#if 0
 	(*process)[esl::system::FileDescriptor::getOut()] >> boost::filesystem::path(settings.cd + "/out.log");
 	(*process)[esl::system::FileDescriptor::getErr()] >> boost::filesystem::path(settings.cd + "/err.log");
+#else
+	if(!outfile.empty()) {
+		(*process)[esl::system::FileDescriptor::getOut()] >> boost::filesystem::path(outfile);
+	}
+	if(!errfile.empty()) {
+		(*process)[esl::system::FileDescriptor::getErr()] >> boost::filesystem::path(errfile);
+	}
+#endif
 
 	thread = std::thread(&Task::run, this);
 }

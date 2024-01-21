@@ -90,7 +90,7 @@ RequestHandler::InitializedSettings::InitializedSettings(esl::object::Context& c
 RequestHandler::RequestHandler(const Settings& aSettings)
 : service::server::RequestHandler([this](const esl::object::Context& context)
 		{
-			return std::unique_ptr<service::Service>(new Service(context, *this));
+			return std::unique_ptr<service::Service>(new Service(context, *this, notifyMutex));
 		}),
   settings(aSettings)
 { }
@@ -122,7 +122,7 @@ esl::database::ConnectionFactory& RequestHandler::getDbConnectionFactory() const
 }
 
 void RequestHandler::onUpdateTask(const Dao::Task& task) {
-	std::unique_lock<std::mutex> lockNotifyMutex(notifyMutex);
+//	std::unique_lock<std::mutex> lockNotifyMutex(notifyMutex);
 
 	for(const auto& plugin : initializedSettings->plugins) {
 		plugin.get().onUpdateTask(task);

@@ -111,7 +111,7 @@ Event::Setting::Setting(std::vector<std::pair<std::string, std::string>>& settin
 {
 	parse();
 
-	settings.emplace_back(std::make_pair(key, value));
+	settings.emplace_back(std::make_pair(key, evaluate(value, language)));
 }
 
 } /* namespace xml */

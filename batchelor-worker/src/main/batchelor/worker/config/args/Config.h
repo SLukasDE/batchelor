@@ -69,10 +69,12 @@ private:
 	void setNamespaceId(const char* namespaceId);
 	void setMaximumTasksRunning(const char* maximumTasksRunning);
 	void setIdleTimeout(const char* maximumTasksRunning);
+	void setAvailableTimeout(const char* maximumTasksRunning);
 	void setWorkerId(const char* workerId);
 	void addMetrics(const char* key, const char* value);
 	void addConfigFile(const char* value);
 	void addSettings(const char* key, const char* value);
+	void addHttpPort(const char* portStr);
 
 	void addEvent(const char* id, const char* plugin);
 

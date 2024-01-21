@@ -26,6 +26,7 @@
 #include <esl/object/Object.h>
 
 #include <condition_variable>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -38,9 +39,9 @@ namespace plugin {
 
 class TaskFactory : public esl::object::Object {
 public:
-//	virtual ~TaskFactory() = default;
+	virtual const std::map<std::string, int>& getResourcesRequired() const = 0;
 
-	virtual bool isBusy() = 0;
+	virtual bool isBusy(const std::map<std::string, int>& resourcesAvailable) = 0;
 	virtual std::unique_ptr<Task> createTask(std::condition_variable& notifyCV, std::mutex& notifyMutex, const std::vector<std::pair<std::string, std::string>>& metrics, const service::schemas::RunConfiguration& runConfiguration) = 0;
 };
 

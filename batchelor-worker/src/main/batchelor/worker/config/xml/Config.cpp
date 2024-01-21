@@ -16,12 +16,13 @@
  * License along with Batchelor.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <batchelor/common/config/xml/FilePosition.h>
 #include <batchelor/common/config/xml/Element.h>
+#include <batchelor/common/config/xml/FilePosition.h>
+#include <batchelor/common/Timestamp.h>
 
-#include <batchelor/worker/config/xml/Event.h>
 #include <batchelor/worker/config/xml/Config.h>
 #include <batchelor/worker/config/xml/Connection.h>
+#include <batchelor/worker/config/xml/Event.h>
 
 #include <esl/io/FilePosition.h>
 
@@ -52,14 +53,14 @@ void Config::parseInnerElement(const common::config::xml::Element& element) {
 
 		Connection(context, settings, id, getFilename(), element);
 	}
+	else if(element.getElementName() == "event") {
+		Event(context, settings, getFilename(), element);
+	}
 	else if(element.getElementName() == "setting") {
 		Setting(settings, getFilename(), element);
 	}
 	else if(element.getElementName() == "metric") {
 		Metric(settings, getFilename(), element);
-	}
-	else if(element.getElementName() == "event") {
-		Event(context, settings, getFilename(), element);
 	}
 	else {
 		throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Unknown element name \"" + element.getElementName() + "\"."));
@@ -79,9 +80,18 @@ Config::Setting::Setting(Procedure::Settings& settings, const std::string& filen
 {
 	parse();
 
-	if(key == "maximum-tasks-running") {
+	if(key == "namespace") {
+		if(settings.namespaceId.empty()) {
+			throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Multiple definition of parameter \"" + key + "\"."));
+		}
+		settings.namespaceId = evaluate(value, language);
+		if(!settings.namespaceId.empty()) {
+			throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Invalid value \"" + std::string(settings.namespaceId) + "\" for parameter \"" + key + "\"."));
+		}
+	}
+	else if(key == "maximum-tasks-running") {
 		if(settings.maximumTasksRunning != std::string::npos) {
-			throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Multiple definition of parameter \"maximum-tasks-running\"."));
+			throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Multiple definition of parameter \"" + key + "\"."));
 		}
 
 		int v = 0;
@@ -90,23 +100,58 @@ Config::Setting::Setting(Procedure::Settings& settings, const std::string& filen
 			v = std::stoi(evaluate(value, language));
 		}
 		catch(const std::invalid_argument& e) {
-			throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Invalid value \"" + std::string(value) + "\"."));
+			throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Invalid value \"" + std::string(value) + "\" for parameter \"" + key + "\"."));
 		}
 		catch(const std::out_of_range& e) {
-			throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Value \"" + std::string(value) + "\" is out of range."));
+			throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Value \"" + std::string(value) + "\" for parameter \"" + key + "\" is out of range."));
 		}
 		if(v <= 0) {
-			throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Value \"" + std::string(value) + "\" is negative."));
-		}
-
-		if(settings.maximumTasksRunning != std::string::npos) {
-			throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Multiple specification of setting \"maximum-tasks-running\" is not allowed."));
+			throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Value \"" + std::string(value) + "\" for parameter \"" + key + "\" is negative."));
 		}
 
 		settings.maximumTasksRunning = v;
 
 		if(settings.maximumTasksRunning == std::string::npos) {
-			throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Value of setting \"maximum-tasks-running\" must be equal or greater than 0, but lower than " + std::to_string(std::string::npos) + "."));
+			throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Value of setting \"" + key + "\" must be equal or greater than 0, but lower than " + std::to_string(std::string::npos) + "."));
+		}
+	}
+	else if(key == "idle-timeout") {
+		if(settings.idleTimeout.count() == 0) {
+			throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Multiple definition of parameter \"" + key + "\"."));
+		}
+
+		try {
+			settings.idleTimeout = common::Timestamp::toDuration(evaluate(value, language));
+		}
+		catch(const std::exception& e) {
+			throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Invalid value \"" + std::string(value) + "\" for parameter \"" + key + "\". " + e.what()));
+		}
+		catch(...) {
+			throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Invalid value \"" + std::string(value) + "\" for parameter \"" + key + "\"."));
+		}
+	}
+	else if(key == "available-timeout") {
+		if(settings.availableTimeout.count() == 0) {
+			throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Multiple definition of parameter \"" + key + "\"."));
+		}
+
+		try {
+			settings.availableTimeout = common::Timestamp::toDuration(evaluate(value, language));
+		}
+		catch(const std::exception& e) {
+			throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Invalid value \"" + std::string(value) + "\" for parameter \"" + key + "\". " + e.what()));
+		}
+		catch(...) {
+			throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Invalid value \"" + std::string(value) + "\" for parameter \"" + key + "\"."));
+		}
+	}
+	else if(key == "worker-id") {
+		if(settings.workerId.empty()) {
+			throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Multiple definition of parameter \"" + key + "\"."));
+		}
+		settings.workerId = evaluate(value, language);
+		if(!settings.workerId.empty()) {
+			throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Invalid value \"" + std::string(settings.namespaceId) + "\" for parameter \"" + key + "\"."));
 		}
 	}
 	else {

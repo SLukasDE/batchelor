@@ -41,6 +41,8 @@ class Service : public service::Service {
 public:
     Service(const esl::com::http::client::Connection& connection);
 
+	void alive() override;
+
 	// used by worker
 	schemas::FetchResponse fetchTask(const std::string& namespaceId, const schemas::FetchRequest& fetchRequest) override;
 

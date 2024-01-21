@@ -24,7 +24,7 @@ public:
 	 * but it will generate a Function/Method in Lexer.cpp started with YY_DECL ...
 	 *
 	 * But you will find as well the folling "#define" in Lexer.l that will make our result as we want:
-	 * #define YY_DECL int batchelor::condition::Scanner::lexer(batchelor::condition::Parser::semantic_type* const lval, batchelor::condition::Parser::location_type* loc)
+	 * #define YY_DECL int batchelor::condition::Scanner::lexer(batchelor::condition::Parser::semantic_type* const lval, batchelor::condition::Parser::location_type* loc, batchelor::condition::Driver& driver)
 	 *
 	 * To make the parser calling Scanner::lexer(...) instead of ::yylex(...) there is another definition in Parser.yy:
 	 * #define yylex scanner.lexer

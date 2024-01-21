@@ -258,6 +258,16 @@ public:
 		requestContext.getConnection().send(response, std::move(output));
 	}
 
+	// GET: "/alive"
+	void process_6() {
+		service->alive();
+
+		esl::utility::MIME responseMIME = esl::utility::MIME::Type::applicationJson;
+		esl::com::http::server::Response response(200, responseMIME);
+		esl::io::Output output = esl::io::output::Memory::create(emptyResponse.data(), emptyResponse.size());
+		requestContext.getConnection().send(response, std::move(output));
+	}
+
 private:
     esl::com::http::server::RequestContext& requestContext;
     ProcessHandler processHandler;
@@ -327,6 +337,11 @@ esl::io::Input RequestHandler::accept(esl::com::http::server::RequestContext& re
 	else if(pathList.size() == 4 && pathList[0] == "signal"
 	&& requestContext.getRequest().getMethod() == esl::utility::HttpMethod::toString(esl::utility::HttpMethod::Type::httpPost)) {
 		writer.reset(new InputHandler(requestContext, &InputHandler::process_5, makeService(objectContext), std::move(pathList)));
+	}
+	// GET: "/alive"
+	else if(pathList.size() == 1 && pathList[0] == "alive"
+	&& requestContext.getRequest().getMethod() == esl::utility::HttpMethod::toString(esl::utility::HttpMethod::Type::httpGet)) {
+		writer.reset(new InputHandler(requestContext, &InputHandler::process_6, makeService(objectContext), std::move(pathList)));
 	}
 
 	if(writer == nullptr) {

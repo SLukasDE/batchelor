@@ -29,6 +29,7 @@
 #include <batchelor/worker/plugin/TaskFactory.h>
 
 #include <esl/com/http/client/Connection.h>
+#include <esl/com/http/server/Socket.h>
 #include <esl/object/Context.h>
 #include <esl/object/Procedure.h>
 
@@ -54,12 +55,15 @@ public:
 
 		std::string namespaceId;
 		std::string workerId;
+
 		std::vector<std::pair<std::string, std::string>> metrics;
 		std::size_t maximumTasksRunning = std::string::npos;
 		std::chrono::milliseconds requestInterval{5000};
 		std::chrono::milliseconds idleTimeout{0};
+		std::chrono::milliseconds availableTimeout{0};
 		std::set<std::string> taskFactoryIds;
 		std::set<std::string> connectionFactoryIds;
+		std::uint16_t alivePort = 0;
 	};
 
 	static std::unique_ptr<esl::object::Procedure> create(const std::vector<std::pair<std::string, std::string>>& settings);
@@ -83,6 +87,7 @@ private:
 
 		std::map<std::string, std::reference_wrapper<plugin::TaskFactory>> taskFactroyByEventType;
 		std::vector<std::pair<std::string, std::reference_wrapper<common::plugin::ConnectionFactory>>> connectionFactories;
+		std::map<std::string, int> resourcesAvailable;
 	};
 
 	void signalTasks(const std::string& signal);
@@ -95,6 +100,9 @@ private:
 	const Settings settings;
 	std::unique_ptr<InitializedSettings> initializedSettings;
 
+	std::unique_ptr<esl::com::http::server::Socket> socket;
+	std::mutex socketMutex;
+
 	mutable std::size_t nextConnectionFactory = 0;
 	mutable common::plugin::ConnectionFactory* httpConnectionFactory = nullptr;
 
@@ -106,6 +114,8 @@ private:
 
 	std::map<std::string, std::unique_ptr<plugin::Task>> taskByTaskId;
 	std::chrono::time_point<std::chrono::steady_clock> idleTimeAt;
+	std::chrono::time_point<std::chrono::steady_clock> unavailableTimeAt;
+	bool availableTimeoutOccurred = false;
 };
 
 } /* namespace worker */

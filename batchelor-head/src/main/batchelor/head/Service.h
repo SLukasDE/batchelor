@@ -36,6 +36,7 @@
 #include <esl/object/Context.h>
 
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -44,7 +45,9 @@ namespace head {
 
 class Service : public service::Service {
 public:
-	Service(const esl::object::Context& context, RequestHandler& requestHandler);
+	Service(const esl::object::Context& context, RequestHandler& requestHandler, std::mutex& mutex);
+
+	void alive() override;
 
 	// used by worker
 	service::schemas::FetchResponse fetchTask(const std::string& namespaceId, const service::schemas::FetchRequest& fetchRequest) override;
@@ -63,6 +66,7 @@ private:
 
 	const esl::object::Context& context;
 	RequestHandler& requestHandler;
+	std::lock_guard<std::mutex> lockMutex;
 	mutable std::unique_ptr<esl::database::Connection> dbConnection;
 	mutable std::unique_ptr<Dao> dao;
 };

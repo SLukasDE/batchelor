@@ -22,6 +22,9 @@
 
 #include <esl/io/FilePosition.h>
 
+#include <unistd.h>
+extern char **environ;
+
 namespace batchelor {
 namespace common {
 namespace config {
@@ -57,13 +60,10 @@ bool Setting::stringToBool(bool& b, std::string str) {
 	return true;
 }
 
-std::string Setting::evaluate(const std::string& expression, const std::string& language) const {
-	if(language == "plain") {
-		return expression;
-	}
-
+std::string Setting::generalEvaluate(const std::string& expression, bool relaxedSyntax, const std::map<std::string, std::string>& keyValues) {
 	std::string value;
-	std::string var;
+	std::string varName;
+	std::string varString;
 	enum {
 		intro,
 		begin,
@@ -72,30 +72,45 @@ std::string Setting::evaluate(const std::string& expression, const std::string& 
 
 	for(std::size_t i=0; i<expression.size(); ++i) {
 		if(state == begin) {
+			varString += expression.at(i);
 			if(expression.at(i) == '}') {
-				char* val = getenv(var.c_str());
-				if(val == nullptr) {
-					throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("No value available for variable \"" + var + "\" in expression: \"" + expression + "\""));
+				auto iter = keyValues.find(varName);
+				if(iter != keyValues.end()) {
+					value += iter->second;
 				}
-				value += val;
+				else if(relaxedSyntax) {
+					value += varString;
+				}
+				else {
+					throw std::runtime_error("No value available for variable \"" + varName + "\" in expression: \"" + expression + "\"");
+				}
+
 				state = end;
-				var.clear();
+				varString.clear();
+				varName.clear();
 			}
 			else {
-				var += expression.at(i);
+				varName += expression.at(i);
 			}
 		}
 		else if(state == intro) {
+			varString += expression.at(i);
 			if(expression.at(i) == '{') {
 				state = begin;
 			}
+			else if(relaxedSyntax) {
+				value += varString;
+				varString.clear();
+			}
 			else {
-				throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Syntax error in expression: \"" + expression + "\""));
+				throw std::runtime_error("Syntax error in expression: \"" + expression + "\"");
 			}
 		}
 		else {
 			if(expression.at(i) == '$') {
 				state = intro;
+				varName.clear();
+				varString = expression.at(i);
 			}
 			else {
 				value += expression.at(i);
@@ -104,6 +119,35 @@ std::string Setting::evaluate(const std::string& expression, const std::string& 
 	}
 
 	return value;
+}
+
+std::string Setting::evaluate(const std::string& expression, const std::string& language) const {
+	if(language == "plain") {
+		return expression;
+	}
+
+	try {
+		std::map<std::string, std::string> keyValues;
+
+		for(char **s = environ; *s; s++) {
+			std::string env(*s);
+			std::size_t pos = env.find('=');
+			std::string key = env.substr(0, pos);
+			std::string value;
+			if(pos != std::string::npos) {
+		        value = env.substr(pos+1);
+			}
+			keyValues[key] = value;
+		}
+
+		return generalEvaluate(expression, language.empty(), keyValues);
+	}
+	catch(const std::exception& e) {
+		throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error(e.what()));
+	}
+	catch(...) {
+		throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("General error in expression: \"" + expression + "\""));
+	}
 }
 
 void Setting::parseUserData(void*) {

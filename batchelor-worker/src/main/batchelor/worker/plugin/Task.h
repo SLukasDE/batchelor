@@ -21,7 +21,7 @@
 
 #include <batchelor/common/types/State.h>
 
-
+#include <map>
 #include <string>
 
 namespace batchelor {
@@ -34,6 +34,8 @@ public:
 		common::types::State::Type state;
 		int returnCode;
 		std::string message; // e.g. exception message
+
+		std::map<std::string, int> resourcesAllocated;
 	};
 
 	virtual ~Task() = default;

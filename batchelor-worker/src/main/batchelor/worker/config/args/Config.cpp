@@ -44,18 +44,23 @@ void Config::printUsage() {
 	std::cout << "\n";
 	std::cout << "OPTIONS:\n";
 	std::cout << "  -N, --namespace             <namespace-id>  Specifies the used namespace for all commands.\n";
+	std::cout << "  -W, --worker-id             <value>         Set ID of worker to the specified value.\n";
+	std::cout << "                                              If this value  is not set, worker-id is set to a random UUID string.\n";
 	std::cout << "  -T, --maximum-tasks-running <value>         Limits maximum number of tasks running at the same time.\n";
-	std::cout << "  -I, --idle-timeout          <value>         Specifies a timeout greater than zero second.\n";
+	std::cout << "  -I, --idle-timeout          <value>         Specifies a timeout to exit the worker. Its value must be greater than zero seconds.\n";
 	std::cout << "                                              The worker will exit after it is idle for this duration. Valid values are:\n";
 	std::cout << "                                              * <number>[ms]      e.g. 100000ms for 100.000 milliseconds.\n";
 	std::cout << "                                              * <number>[s|sec]   e.g. 100s or 100sec for 100 seconds.\n";
 	std::cout << "                                              * <number>[m|min]   e.g. 15m or 15min for 15 minutes.\n";
 	std::cout << "                                              * <number>[h]       e.g. 1h for 1 hour.\n";
 	std::cout << "                                              If this idle-timeout is not set, worker will never exit automatically by itself.\n";
-	std::cout << "  -W, --worker-id             <value>         Set ID of worker to specified value.\n";
+	std::cout << "  -A, --available-timeout     <value>         Specifies a timeout the worker will offer no more event types. Its value must be greater\n";
+	std::cout << "                                              than zero seconds. If the timeout occurs and no more task is running the worker will exit.\n";
 	std::cout << "  -m, --metric                <key> <value>   Specification of worker specific metrics that can be used in condition formulas.\n";
 	std::cout << "  -f, --config-file           <file>          Configuration file can contain all connection parameters, provided event types and much more\n";
 	std::cout << "  -s, --setting               <key> <value>   Event or connection specific setting.\n";
+	std::cout << "  -H, --http-port             <port>          Specifies a HTTP port to listen.\n";
+	std::cout << "                                              This is useful to external processes to check if the worker is still running.\n";
 	std::cout << "\n";
 	std::cout << "\n";
 	std::cout << "EVENT OPTIONS:\n";
@@ -75,6 +80,8 @@ void Config::printUsage() {
 	std::cout << "                                            * cd:                    <working directory>\n";
 	std::cout << "                                            * cd-flag:               override|fixed\n";
 	std::cout << "                                            * cmd:                   <executable> (always fixed)\n";
+	std::cout << "                                            * outfile:               <filename to write stdout>\n";
+	std::cout << "                                            * errfile:               <filename to write stderr>\n";
 	std::cout << "\n";
 	std::cout << "\n";
 	std::cout << "CONNECTION OPTIONS:\n";
@@ -121,6 +128,10 @@ Config::Config(esl::object::Context& aContext, Procedure::Settings& aSettings, i
 			setIdleTimeout(i+1 < argc ? argv[i+1] : nullptr);
 			++i;
 		}
+		else if(currentArg == "-A"  || currentArg == "--available-timeout") {
+			setAvailableTimeout(i+1 < argc ? argv[i+1] : nullptr);
+			++i;
+		}
 		else if(currentArg == "-W"  || currentArg == "--worker-id") {
 			setWorkerId(i+1 < argc ? argv[i+1] : nullptr);
 			++i;
@@ -132,6 +143,10 @@ Config::Config(esl::object::Context& aContext, Procedure::Settings& aSettings, i
 		else if(currentArg == "-s"  || currentArg == "--setting") {
 			addSettings(i+1 < argc ? argv[i+1] : nullptr, i+2 < argc ? argv[i+2] : nullptr);
 			i = i+2;
+		}
+		else if(currentArg == "-H"  || currentArg == "--http-port") {
+			addHttpPort(i+1 < argc ? argv[i+1] : nullptr);
+			i = i+1;
 		}
 		else if(currentArg == "-e"  || currentArg == "--event-type") {
 			addEvent(i+1 < argc ? argv[i+1] : nullptr, i+2 < argc ? argv[i+2] : nullptr);
@@ -222,6 +237,22 @@ void Config::setIdleTimeout(const char* idleTimeout) {
 	}
 }
 
+void Config::setAvailableTimeout(const char* availableTimeout) {
+	if(settings.availableTimeout.count() > 0) {
+		throw ArgumentsException("Multiple specification of option \"--available-timeout\" is not allowed.");
+	}
+	if(!availableTimeout) {
+		throw ArgumentsException("Value missing of option \"--available-timeout\".");
+	}
+
+	try {
+		settings.availableTimeout = common::Timestamp::toDuration(availableTimeout);
+	}
+	catch(const std::exception& e) {
+		throw ArgumentsException("Invalid value \"" + std::string(availableTimeout) + "\" of option \"--available-timeout\". " + e.what());
+	}
+}
+
 void Config::setWorkerId(const char* workerId) {
 	if(!settings.workerId.empty()) {
 		throw ArgumentsException("Multiple specification of option \"--worker-id\" is not allowed.");
@@ -270,6 +301,25 @@ void Config::addSettings(const char* key, const char* value) {
 		break;
 	case SettingsState::connection:
 		connection.settings.emplace_back(key, value);
+	}
+}
+
+void Config::addHttpPort(const char* portStr) {
+	if(settings.alivePort > 0) {
+		throw ArgumentsException("Multiple specification of option \"--http-port\" is not allowed.");
+	}
+	if(!portStr) {
+		throw ArgumentsException("Value missing of option \"--http-port\".");
+	}
+
+	try {
+		settings.alivePort = std::stoi(portStr);
+	}
+	catch(const std::exception& e) {
+		throw ArgumentsException("Invalid value \"" + std::string(portStr) + "\" of option \"--http-port\". " + e.what());
+	}
+	if(settings.alivePort == 0) {
+		throw ArgumentsException("Invalid value \"" + std::string(portStr) + "\" of option \"--http-port\".");
 	}
 }
 

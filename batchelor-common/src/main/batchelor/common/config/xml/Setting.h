@@ -22,6 +22,7 @@
 #include <batchelor/common/config/xml/ParseElements.h>
 #include <batchelor/common/config/xml/Element.h>
 
+#include <map>
 #include <string>
 
 namespace batchelor {
@@ -31,6 +32,7 @@ namespace xml {
 
 struct Setting : public ParseElements {
 	static bool stringToBool(bool& b, std::string str);
+	static std::string generalEvaluate(const std::string& expression, bool relaxedSyntax, const std::map<std::string, std::string>& keyValues);
 	std::string evaluate(const std::string& expression, const std::string& language) const;
 
 	std::string key;

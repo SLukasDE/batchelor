@@ -114,10 +114,15 @@ service::schemas::TaskStatusHead taskToTaskStatusHead(const Dao::Task& task) {
 
 }
 
-Service::Service(const esl::object::Context& aContext, RequestHandler& aRequestHandler)
+Service::Service(const esl::object::Context& aContext, RequestHandler& aRequestHandler, std::mutex& mutex)
 : context(aContext),
-  requestHandler(aRequestHandler)
+  requestHandler(aRequestHandler),
+  lockMutex(mutex)
 { }
+
+void Service::alive() {
+	logger.trace << "Service call: \"alive\"\n";
+}
 
 service::schemas::FetchResponse Service::fetchTask(const std::string& namespaceId, const service::schemas::FetchRequest& fetchRequest) {
 	logger.trace << "Service call: \"fetchTask\"\n";

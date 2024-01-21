@@ -24,11 +24,14 @@
 
 #include <sqlite4esl/database/ConnectionFactory.h>
 
+#include <esl/crypto/KeyStore.h>
 #include <esl/database/ConnectionFactory.h>
 #include <esl/database/SQLiteConnectionFactory.h>
 #include <esl/plugin/Registry.h>
 #include <esl/utility/String.h>
 
+#include <fstream>
+#include <stdexcept>
 #include <iostream>
 
 namespace batchelor {
@@ -219,7 +222,46 @@ void Config::addSettings(const char* key, const char* value) {
 }
 
 void Config::addCertificate(const char* hostName, const char* keyFile, const char* certFile) {
+	std::vector<unsigned char> key;
+	std::vector<unsigned char> certificate;
 
+	if(!hostName) {
+		throw ArgumentsException("Host name missing of option \"--certificate\".");
+	}
+
+	if(!keyFile) {
+		throw ArgumentsException("Key file missing of option \"--certificate\".");
+	}
+
+	if(!certFile) {
+		throw ArgumentsException("Certificate file missing of option \"--certificate\".");
+	}
+
+	if(keyFile[0] != '*' && keyFile[1] != 0) {
+		std::ifstream ifStream(keyFile, std::ios::binary );
+		if(!ifStream.good()) {
+			throw ArgumentsException("Cannot open key file \"" + std::string(keyFile) + "\"");
+		}
+	    key = std::vector<unsigned char>(std::istreambuf_iterator<char>(ifStream), {});
+	}
+
+	if(certFile[0] != '*' && certFile[1] != 0) {
+		std::ifstream ifStream(certFile, std::ios::binary );
+		if(!ifStream.good()) {
+			throw ArgumentsException("Cannot open certificate file \"" + std::string(certFile) + "\"");
+		}
+		certificate = std::vector<unsigned char>(std::istreambuf_iterator<char>(ifStream), {});
+	}
+
+
+
+	esl::crypto::KeyStore* keyStore = esl::plugin::Registry::get().findObject<esl::crypto::KeyStore>();
+	if(!keyStore) {
+		throw ArgumentsException("Cannot add key and certificate, because there is no crypto engine installed.");
+	}
+
+	keyStore->addCertificate(hostName, certificate);
+	keyStore->addPrivateKey(hostName, key, "");
 }
 
 void Config::addGroup(const char* group, const char* namespaceId, const char* roleStr1) {

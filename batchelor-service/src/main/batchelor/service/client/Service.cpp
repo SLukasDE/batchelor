@@ -51,6 +51,13 @@ Service::Service(const esl::com::http::client::Connection& aConnection)
 : connection(aConnection)
 { }
 
+void Service::alive() {
+	auto response = connection.send(esl::com::http::client::Request("alive", esl::utility::HttpMethod::Type::httpGet, esl::utility::MIME::Type::textPlain), esl::io::Output(), esl::io::Input());
+    if(response.getStatusCode() != 200) {
+    	throw esl::system::Stacktrace::add(std::runtime_error("Received not supported status code \"" + std::to_string(response.getStatusCode()) + "\""));
+    }
+}
+
 schemas::FetchResponse Service::fetchTask(const std::string& namespaceId, const schemas::FetchRequest& fetchRequest) {
 	schemas::FetchResponse fetchResponse;
 

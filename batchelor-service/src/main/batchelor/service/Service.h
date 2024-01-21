@@ -36,6 +36,8 @@ class Service {
 public:
 	virtual ~Service() = default;
 
+	virtual void alive() = 0;
+
 	/* This is a complex call used by workers.
 	 * Workers are sending by FetchRequest
 	 * - the state of their current running tasks.

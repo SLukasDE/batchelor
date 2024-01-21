@@ -49,10 +49,14 @@ public:
 		override, extend, fixed
 	};
 	struct Settings {
-		MetricsPolicy metricsPolicy = MetricsPolicy::allow;
-		std::set<std::string> metrics;
-
+		std::map<std::string, int> resourcesRequired;
 		std::size_t maximumTasksRunning = 0;
+
+		//MetricsPolicy metricsPolicy = MetricsPolicy::allow;
+		//std::set<std::string> metrics;
+
+		std::string outfile;
+		std::string errfile;
 
 		std::string args;
 		Flag argsFlag = Flag::fixed; // override|extend|fixed
@@ -101,7 +105,8 @@ public:
 	 */
 	static std::unique_ptr<plugin::TaskFactory> create(const std::vector<std::pair<std::string, std::string>>& settings);
 
-	bool isBusy() override;
+	const std::map<std::string, int>& getResourcesRequired() const override;
+	bool isBusy(const std::map<std::string, int>& resourcesAvailable) override;
 	/* settings:
 	 * - arguments,
 	 * - environment variables,

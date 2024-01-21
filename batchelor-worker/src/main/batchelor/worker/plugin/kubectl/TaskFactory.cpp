@@ -47,7 +47,7 @@ TaskFactory::TaskFactory(Settings aSettings)
 std::unique_ptr<plugin::TaskFactory> TaskFactory::create(const std::vector<std::pair<std::string, std::string>>& aSettings) {
 	Settings settings;
 
-	bool hasMetricsPolicy = false;
+	//bool hasMetricsPolicy = false;
 	bool hasArgs = false;
 	bool hasArgsFlag = false;
 	bool hasEnvFlagGlobal = false;
@@ -76,6 +76,7 @@ std::unique_ptr<plugin::TaskFactory> TaskFactory::create(const std::vector<std::
 			}
 			settings.maximumTasksRunning = static_cast<std::size_t>(maximumJobsRunning);
 		}
+		/*
 		else if(setting.first == "metrics-policy") {
 			if(hasMetricsPolicy) {
 				throw std::runtime_error("Multiple definition of attribute \"metrics-policy\".");
@@ -96,6 +97,7 @@ std::unique_ptr<plugin::TaskFactory> TaskFactory::create(const std::vector<std::
 		else if(setting.first == "metric") {
 			settings.metrics.insert(setting.second);
 		}
+		*/
 		else if(setting.first == "args") {
 		    //<setting key="args" value="--propertyId=Bla --propertyFile=/wxx/secret/property.cfg"/>
 			if(hasArgs) {
@@ -239,7 +241,11 @@ std::unique_ptr<plugin::TaskFactory> TaskFactory::create(const std::vector<std::
 	return std::unique_ptr<plugin::TaskFactory>(new TaskFactory(std::move(settings)));
 }
 
-bool TaskFactory::isBusy() {
+const std::map<std::string, int>& TaskFactory::getResourcesRequired() const {
+	return settings.resourcesRequired;
+}
+
+bool TaskFactory::isBusy(const std::map<std::string, int>& resourcesAvailable) {
 	if(settings.maximumTasksRunning > 0 && tasksRunning >= settings.maximumTasksRunning) {
 		return true;
 	}

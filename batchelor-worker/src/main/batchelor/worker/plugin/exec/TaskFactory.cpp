@@ -49,7 +49,6 @@ TaskFactory::TaskFactory(Settings aSettings)
 std::unique_ptr<plugin::TaskFactory> TaskFactory::create(const std::vector<std::pair<std::string, std::string>>& aSettings) {
 	Settings settings;
 
-	//bool hasMetricsPolicy = false;
 	bool hasArgs = false;
 	bool hasArgsFlag = false;
 	bool hasEnvFlagGlobal = false;
@@ -78,48 +77,6 @@ std::unique_ptr<plugin::TaskFactory> TaskFactory::create(const std::vector<std::
 				throw std::runtime_error("Multiple definition of parameter \"" + setting.first + "\"");
 			}
 		}
-		else if(setting.first == "maximum-tasks-running") {
-		    //<setting key="maximum-tasks-running" value="3"/>
-			if(settings.maximumTasksRunning != 0) {
-				throw std::runtime_error("Multiple definition of parameter \"" + setting.first + "\"");
-			}
-			int maximumJobsRunning = 0;
-			try {
-				maximumJobsRunning = std::stoi(setting.second);
-			}
-			catch(const std::invalid_argument& e) {
-				throw std::runtime_error("Invalid value \"" + setting.second + "\" for parameter \"" + setting.first + "\"");
-			}
-			catch(const std::out_of_range& e) {
-				throw std::runtime_error("Value \"" + setting.second + "\" for parameter \"" + setting.first + "\" is out of range.");
-			}
-			if(maximumJobsRunning <= 0) {
-				throw std::runtime_error("Value for parameter \"" + setting.first + "\" must be greater than 0 but it is \"" + setting.second + "\"");
-			}
-			settings.maximumTasksRunning = static_cast<std::size_t>(maximumJobsRunning);
-		}
-		/*
-		else if(setting.first == "metrics-policy") {
-			if(hasMetricsPolicy) {
-				throw std::runtime_error("Multiple definition of attribute \"metrics-policy\".");
-			}
-
-			hasMetricsPolicy = true;
-
-			if(setting.second == "allow") {
-				settings.metricsPolicy = MetricsPolicy::allow;
-			}
-			else if(setting.second == "deny") {
-				settings.metricsPolicy = MetricsPolicy::deny;
-			}
-			else {
-				throw std::runtime_error("Value \"" + setting.second + "\" of attribute 'metrics-policy' is invalid");
-			}
-		}
-		else if(setting.first == "metric") {
-			settings.metrics.insert(setting.second);
-		}
-		*/
 		else if(setting.first == "outfile") {
 			if(!settings.outfile.empty()) {
 				throw std::runtime_error("Multiple definition of parameter \"" + setting.first + "\".");
@@ -295,13 +252,9 @@ const std::map<std::string, int>& TaskFactory::getResourcesRequired() const {
 }
 
 bool TaskFactory::isBusy(const std::map<std::string, int>& resourcesAvailable) {
-	if(settings.maximumTasksRunning > 0 && tasksRunning >= settings.maximumTasksRunning) {
-		return true;
-	}
-
 	for(const auto& resourceRequired : settings.resourcesRequired) {
 		auto resourceAvailable = resourcesAvailable.find(resourceRequired.first);
-		if(resourceAvailable == resourcesAvailable.end() || resourceAvailable->second >= resourceRequired.second) {
+		if(resourceAvailable == resourcesAvailable.end() || resourceAvailable->second < resourceRequired.second) {
 			return true;
 		}
 	}
@@ -310,12 +263,7 @@ bool TaskFactory::isBusy(const std::map<std::string, int>& resourcesAvailable) {
 }
 
 std::unique_ptr<plugin::Task> TaskFactory::createTask(std::condition_variable& notifyCV, std::mutex& notifyMutex, const std::vector<std::pair<std::string, std::string>>& metrics, const service::schemas::RunConfiguration& runConfiguration) {
-	++tasksRunning;
 	return std::unique_ptr<Task>(new Task(*this, notifyCV, notifyMutex, metrics, settings, runConfiguration));
-}
-
-void TaskFactory::releaseProcess() {
-	--tasksRunning;
 }
 
 } /* namespace exec */

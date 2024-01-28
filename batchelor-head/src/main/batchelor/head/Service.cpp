@@ -40,6 +40,7 @@
 #include <chrono>
 #include <cstdint>
 
+#include <iostream>
 namespace batchelor {
 namespace head {
 namespace {
@@ -63,19 +64,24 @@ service::schemas::RunResponse makeRunResponse(const Dao::Task* task) {
 
 std::uint32_t makeCrc32(const service::schemas::RunRequest& runRequest) {
 	std::string crc32Str;
+
+	// Condition and priority may be changed.
+	// crc32Str = runRequest.condition;
+
 	for(const auto& setting : runRequest.settings) {
-		if(!crc32Str.empty()) {
-			crc32Str += ";";
-		}
-		crc32Str += setting.key + "=" + setting.value;
+		crc32Str += ";" + setting.key + "=" + setting.value;
 	}
+	for(const auto& metric : runRequest.metrics) {
+		crc32Str += ";" + metric.key + "=" + metric.value;
+	}
+
 	return esl::utility::CRC32().pushData(crc32Str.c_str(), crc32Str.size()).get();
 }
-
+/*
 std::vector<service::schemas::Setting> getMetrics(const std::vector<service::schemas::Setting>& metrics) {
 	return metrics;
 }
-
+*/
 bool evaluateCondition(const std::vector<service::schemas::Setting>& metrics, const std::string& condition) {
 	return true;
 }
@@ -86,6 +92,7 @@ service::schemas::TaskStatusHead taskToTaskStatusHead(const Dao::Task& task) {
 	rv.runConfiguration.eventType = task.eventType;
 	rv.runConfiguration.taskId = task.taskId;
 	rv.runConfiguration.settings = task.settings;
+	rv.runConfiguration.metrics = task.metrics;
 	/* Metrics contains all metric variables and their values as used for the condition at the time the task has been assigned to a worker and state changed to running.
 	 * Available variables to get used in the formula are all variables delivered as metrics of "fetch-request" like
 	 * - cpu usage               (CPU_USAGE),
@@ -100,7 +107,7 @@ service::schemas::TaskStatusHead taskToTaskStatusHead(const Dao::Task& task) {
 	 * - priority,
 	 * - ...
 	 */
-	rv.metrics = task.metrics;
+//	rv.metrics = task.metrics;
 	rv.state = batchelor::common::types::State::toString(task.state);
 	rv.returnCode = task.returnCode;
 	rv.message = task.message;
@@ -110,6 +117,16 @@ service::schemas::TaskStatusHead taskToTaskStatusHead(const Dao::Task& task) {
 	rv.tsLastHeartBeat = batchelor::common::Timestamp::toJSON(task.lastHeartbeatTS);
 
 	return rv;
+}
+
+void addOrReplaceMetric(std::vector<service::schemas::Setting>& metrics, const std::string& key, const std::string& value) {
+	for(auto& metric : metrics) {
+		if(metric.key == key) {
+			metric.value = value;
+			return;
+		}
+	}
+	metrics.emplace_back(service::schemas::Setting::make(key, value));
 }
 
 }
@@ -181,25 +198,50 @@ service::schemas::FetchResponse Service::fetchTask(const std::string& namespaceI
 	});
 	getDao().updateEventTypes(eventTypes);
 
-	std::vector<service::schemas::Setting> metrics = getMetrics(fetchRequest.metrics);
 	for(auto& task : tasks) {
-		if(evaluateCondition(metrics, task.condition)) {
-			task.state = batchelor::common::types::State::running;
-			task.startTS = task.lastHeartbeatTS = std::chrono::system_clock::now();
-			task.metrics = metrics;
-			getDao().updateTask(namespaceId, task);
-			requestHandler.onUpdateTask(task);
+		// Initialize 'metrics' with metrics set by batchelor control
+		std::vector<service::schemas::Setting> metrics = task.metrics;
 
-			service::schemas::RunConfiguration runConfiguration;
-
-			runConfiguration.taskId = task.taskId;
-			runConfiguration.eventType = task.eventType;
-			runConfiguration.settings = task.settings;
-
-			rv.runConfigurations.push_back(runConfiguration);
-
-			break;
+		// add or replace metrics with metrics provided by the worker
+		for(const auto& fetchRequestMetric : fetchRequest.metrics) {
+			addOrReplaceMetric(metrics, fetchRequestMetric.key, fetchRequestMetric.value);
 		}
+
+
+
+
+		// add or replace metrics with metrics calculated by head-server, e.g. waiting time
+		std::chrono::system_clock::time_point nowTS = std::chrono::system_clock::now();
+
+		auto secondsWaiting = std::chrono::duration_cast<std::chrono::seconds>(nowTS-task.createdTS).count();
+		addOrReplaceMetric(metrics, "SECONDS_WAITING", std::to_string(secondsWaiting));
+
+		auto minutesWaiting = std::chrono::duration_cast<std::chrono::minutes>(nowTS-task.createdTS).count();
+		addOrReplaceMetric(metrics, "MINUTES_WAITING", std::to_string(minutesWaiting));
+
+
+
+
+		if(!evaluateCondition(metrics, task.condition)) {
+			continue;
+		}
+
+		task.state = batchelor::common::types::State::running;
+		task.startTS = task.lastHeartbeatTS = std::chrono::system_clock::now();
+		task.metrics = metrics;
+
+		getDao().updateTask(namespaceId, task);
+		requestHandler.onUpdateTask(task);
+
+		service::schemas::RunConfiguration runConfiguration;
+
+		runConfiguration.taskId = task.taskId;
+		runConfiguration.eventType = task.eventType;
+		runConfiguration.settings = task.settings;
+		runConfiguration.metrics = task.metrics;
+		rv.runConfigurations.push_back(runConfiguration);
+
+		break;
 	}
 
 	return rv;
@@ -263,12 +305,14 @@ service::schemas::RunResponse Service::runTask(const std::string& namespaceId, c
 
 	service::schemas::RunResponse rv;
 
+	// calculates CRC32 from  and runRequest.metrics
 	std::uint32_t crc32 = makeCrc32(runRequest);
 
 	std::unique_ptr<Dao::Task> existingTask = getDao().loadLatesTaskByEventTypeAndCrc32(namespaceId, runRequest.eventType, crc32);
 	if(existingTask && (existingTask->state == batchelor::common::types::State::queued || existingTask->state == batchelor::common::types::State::running)) {
 		existingTask->priority = runRequest.priority;
-		existingTask->settings = runRequest.settings;
+		//existingTask->settings = runRequest.settings;
+		//existingTask->metrics = runRequest.metrics;
 		existingTask->condition = runRequest.condition;
 		getDao().updateTask(namespaceId, *existingTask);
 		requestHandler.onUpdateTask(*existingTask);
@@ -302,6 +346,7 @@ service::schemas::RunResponse Service::runTask(const std::string& namespaceId, c
 		task.eventType = runRequest.eventType;
 		task.priority = runRequest.priority;
 		task.settings = runRequest.settings;
+		task.metrics = runRequest.metrics;
 #if 1
 		task.createdTS = std::chrono::system_clock::now();
 #else
@@ -335,9 +380,19 @@ void Service::sendSignal(const std::string& namespaceId, const std::string& task
 		throw esl::com::http::server::exception::StatusCode(404, esl::utility::MIME::Type::applicationJson, "{}");
 	}
 
-	task->signals.push_back(signal);
-	getDao().updateTask(namespaceId, *task);
-	requestHandler.onUpdateTask(*task);
+	if(task->state == common::types::State::queued || task->state == common::types::State::running) {
+
+		if(task->state == common::types::State::queued) {
+			task->state = common::types::State::signaled;
+		}
+
+		if(task->state == common::types::State::running) {
+			task->signals.push_back(signal);
+		}
+
+		getDao().updateTask(namespaceId, *task);
+		requestHandler.onUpdateTask(*task);
+	}
 }
 
 esl::database::Connection& Service::getDBConnection() const {

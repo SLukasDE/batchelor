@@ -20,8 +20,6 @@
 #include <batchelor/head/Procedure.h>
 #include <batchelor/head/RequestHandler.h>
 
-#include <mhd4esl/com/http/server/Socket.h>
-
 #include <esl/com/http/server/MHDSocket.h>
 #include <esl/com/http/server/Socket.h>
 #include <esl/plugin/Registry.h>
@@ -40,7 +38,7 @@ std::unique_ptr<esl::com::http::server::RequestHandler> createRequestHandlerSett
 	return std::unique_ptr<esl::com::http::server::RequestHandler>(requestHandler.release());
 }
 }
-
+#if 0
 Procedure::Settings::Settings(const std::vector<std::pair<std::string, std::string>>& settings) {
 	std::chrono::seconds tmpTimeoutZombie = std::chrono::seconds(0);
 	std::chrono::seconds tmpTimeoutCleanup = std::chrono::seconds(0);
@@ -79,6 +77,7 @@ Procedure::Settings::Settings(const std::vector<std::pair<std::string, std::stri
 		timeoutCleanup = tmpTimeoutCleanup;
 	}
 }
+#endif
 
 Procedure::InitializedSettings::InitializedSettings(esl::object::Context& context, const Settings& settings)
 : requestHandler(createRequestHandlerSettings(context, settings))
@@ -90,7 +89,7 @@ Procedure::InitializedSettings::InitializedSettings(esl::object::Context& contex
 	}
 
 	for(const auto& id : settings.socketIds) {
-		if(sockets.emplace(id, std::ref(context.getObject<plugin::Socket>(id))).second == false) {
+		if(sockets.emplace(id, std::ref(context.getObject<common::plugin::Socket>(id))).second == false) {
 			throw esl::system::Stacktrace::add(std::runtime_error("Multiple definition of socket id \"" + id + "\"."));
 		}
 	}

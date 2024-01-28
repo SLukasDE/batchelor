@@ -47,12 +47,15 @@ struct RunConfiguration {
 	 * - settings[4] = { 'cmd' ; '/opt/bin/bestoptxl-calculation' }
 	 */
 	std::vector<Setting> settings;
+
+	std::vector<Setting> metrics;
 };
 
 SERGUT_FUNCTION(RunConfiguration, data, ar) {
     ar & SERGUT_MMEMBER(data, taskId)
        & SERGUT_MMEMBER(data, eventType)
-       & SERGUT_NESTED_MMEMBER(data, settings, settings);
+       & SERGUT_NESTED_MMEMBER(data, settings, settings)
+       & SERGUT_NESTED_MMEMBER(data, metrics, metrics);
 }
 
 } /* namespace schemas */

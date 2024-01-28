@@ -49,11 +49,34 @@ public:
 		override, extend, fixed
 	};
 	struct Settings {
-//		MetricsPolicy metricsPolicy = MetricsPolicy::allow;
-//		std::set<std::string> metrics;
+		struct Volume {
+			Volume() = default;
+			Volume(std::string aKind, std::string aName, std::string aKey, std::string aPath)
+			: kind(aKind),
+			  name(aName),
+			  key(aKey),
+			  path(aPath)
+			{ }
+			std::string kind; // "secret", "configMap", ...
+			std::string name;
+			std::string key;
+			std::string path;
+		};
+		struct Mount {
+			Mount() = default;
+			Mount(std::string aMountPath, std::string aName, std::string aSubPath, bool aReadOnly)
+			: mountPath(aMountPath),
+			  name(aName),
+			  subPath(aSubPath),
+			  readOnly(aReadOnly)
+			{ }
+			std::string mountPath;
+			std::string name; // this is the key of volumes map
+			std::string subPath; // this is the path of the volume entry in volue map
+			bool readOnly = true;
+		};
 
 		std::map<std::string, int> resourcesRequired;
-		std::size_t maximumTasksRunning = 0;
 
 		std::string args;
 		Flag argsFlag = Flag::fixed; // override|extend|fixed
@@ -67,6 +90,21 @@ public:
 
 		std::string cmd;
 		Flag cmdFlag = Flag::fixed; // override|fixed
+
+		std::string yamlFile;
+		std::string kubectlCmd;
+		std::string kubectlConfig;
+		std::string image;
+		std::string serviceAccountName;
+		std::string metaNamespace;
+		int backoffLimit = 0;
+		std::set<std::string> imagePullSecrets;
+		std::string resourcesRequestsCPU;
+		std::string resourcesRequestsMemory;
+		std::string resourcesLimitsCPU;
+		std::string resourcesLimitsMemory;
+		std::map<std::string, std::vector<Volume>> volumes;
+		std::vector<Mount> mounts;
 	};
 
 	TaskFactory(Settings settings);
@@ -88,7 +126,6 @@ public:
 	 * - working dir,
 	 * - executable, ...
 	 * e.g.:
-	 * - settings[ 0] = { 'max-tasks-running' ; '3' }
 	 * - settings[ 1] = { 'args' ;              '--propertyId=Bla --propertyFile=/wxx/secret/property.cfg' }
 	 * - settings[ 2] = { 'args-flag' ;         'override|extend|fixed' }
 	 * - settings[ 3] = { 'env' ;               'DISPLAY=0' }
@@ -119,12 +156,8 @@ public:
 	 */
 	std::unique_ptr<plugin::Task> createTask(std::condition_variable& notifyCV, std::mutex& notifyMutex, const std::vector<std::pair<std::string, std::string>>& metrics, const service::schemas::RunConfiguration& runConfiguration) override;
 
-	void releaseProcess();
-
 private:
 	Settings settings;
-	std::size_t tasksRunning = 0;
-
 };
 
 } /* namespace kubectl */

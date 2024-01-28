@@ -29,6 +29,7 @@ const std::string artefactVersionStr = STRINGIFY(TRANSFORMER_ARTEFACT_VERSION);
 
 int main(int argc, const char* argv[]) {
 	std::cout << "batchelor-head version " << artefactVersionStr << std::endl;
+	//std::cout << "Compiled at " << __DATE__ << " " << __TIME__ << std::endl;
 
 	return batchelor::head::Main(argc, argv).getReturnCode();
 }

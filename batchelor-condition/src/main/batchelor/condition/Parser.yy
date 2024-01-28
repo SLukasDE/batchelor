@@ -5,37 +5,56 @@
 %define api.namespace {batchelor::condition}
 %define api.parser.class {Parser}
 
+// This code is copied at the beginning of the generated file Parser.h
 %code requires{
 
-#include <batchelor/condition/Foo.h>
+#include <batchelor/condition/CObject.h>
 
 namespace batchelor {
 namespace condition {
-	class Driver;
-	class Scanner;
+
+class Compiler;
+class Scanner;
+
 } /* namespace condition */
 } /* namespace batchelor */
 
 }
 
+%parse-param { Compiler& compiler }
 %parse-param { Scanner& scanner }
-%parse-param { Driver& driver }
 
-// Tells Bison to call yylex (or scanner.lexer) with addition argument "batchelor::condition::Driver&"
-%lex-param { Driver& driver }
+// Tells Bison to call yylex (or scanner.fetchNextToken) at the end with an addition argument "batchelor::condition::Compiler&"
+%lex-param { Compiler& compiler }
 
+// This code is copied at the beginning of the generated file Parser.cpp
 %code{
-   /* include for all driver functions */
-   #include <batchelor/condition/Driver.h>
-   #include <batchelor/condition/Foo.h>
 
-   #include <iostream>
-   #include <cstdlib>
-   #include <fstream>
+/* include for all driver functions */
+#include <batchelor/condition/Scanner.h>
+#include <batchelor/condition/Compiler.h>
+
+#include <sstream>
+#include <stdexcept>
+#include <string>
+
+namespace batchelor {
+namespace condition {
+
+void Compiler::parse(Scanner& scanner) {
+	Parser parser(*this, scanner);
+	if(parser.parse() != 0) {
+		throw std::runtime_error("Parse failed!!");
+	}
+}
+	
+} /* namespace condition */
+} /* namespace batchelor */
    
-// Make the parser calling ...->Scanner::lexer(...) instead of ::yylex(...) 
+// Make the parser calling ...->Scanner::fetchNextToken(...) instead of ::yylex(...) 
 #undef yylex
-#define yylex scanner.lexer
+#define yylex scanner.fetchNextToken
+
 }
 
 %define api.value.type variant
@@ -77,7 +96,7 @@ namespace condition {
 
 programm:
   object_list {
-    $$.InsertObjectList($1);
+    $$.add($1);
   }
 ;
 
@@ -95,20 +114,20 @@ object_list:
 object:
   IDENTIFIER_PROC '{' object_list '}' {
     $$.type = CObject::otProcedure;
-    $$.InsertObjectList($3);
+    $$.add($3);
   }
 |
   IDENTIFIER_PROC STRING ':' IDENTIFIER '{' object_list '}' {
     $$.name = $2;
     $$.type = CObject::otProcedure;
     $$.v_string = $4;
-    $$.InsertObjectList($6);
+    $$.add($6);
   }
 |
   IDENTIFIER_PROC ':' IDENTIFIER '{' object_list '}' {
     $$.type = CObject::otProcedure;
     $$.v_string = $3;
-    $$.InsertObjectList($5);
+    $$.add($5);
   }
 |
   IDENTIFIER_VAR STRING ';' {
@@ -248,7 +267,6 @@ bool_term:
   }
 |
   '(' bool_or ')' {
-    driver.addSomething();
     $$ = $2;
   }
 ;
@@ -257,5 +275,7 @@ bool_term:
 
 
 void batchelor::condition::Parser::error(const location_type& l, const std::string& err_message) {
-   std::cerr << "Error: " << err_message << " at " << l << "\n";
+	std::stringstream s;
+	s << "Error: " << err_message << " at " << l;
+	throw std::runtime_error(s.str());
 }

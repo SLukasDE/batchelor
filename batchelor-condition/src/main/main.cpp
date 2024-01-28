@@ -1,14 +1,11 @@
-#include <batchelor/condition/Driver.h>
-
-#include <iostream>
+#include <batchelor/condition/Main.h>
 
 
 int main(int argc, const char *argv[]) {
-	batchelor::condition::Driver driver;
+	batchelor::condition::Main main;
 
-	driver.print(std::cout);
-	driver.print(std::cerr);
+	main.testScanner();
+	main.testParser();
 
 	return 0;
 }
-

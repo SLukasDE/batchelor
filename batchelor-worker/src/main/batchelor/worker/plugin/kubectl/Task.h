@@ -43,46 +43,27 @@ namespace kubectl {
 class Task : public plugin::Task {
 public:
 	struct Settings {
-		struct Volume {
-			Volume(std::string aKind, std::string aName, std::string aKey, std::string aPath)
-			: kind(aKind),
-			  name(aName),
-			  key(aKey),
-			  path(aPath)
-			{ }
-			std::string kind; // "secret", "configMap", ...
-			std::string name;
-			std::string key;
-			std::string path;
-		};
-		struct Mount {
-			Mount(std::string aMountPath, std::string aName, std::string aSubPath, bool aReadOnly)
-			: mountPath(aMountPath),
-			  name(aName),
-			  subPath(aSubPath),
-			  readOnly(aReadOnly)
-			{ }
-			std::string mountPath;
-			std::string name; // this is the key of volumes map
-			std::string subPath; // this is the path of the volume entry in volue map
-			bool readOnly = true;
-		};
-		std::string kubectlCmd = "./kube/kubectl";
-		std::string kubectlConfig = "./kube/dev-level-1.yaml";
+		unsigned int checkPodStatusIntervalSec = 2;
 
-		std::string image = "tsco-docker-private-images.artifactory.rewe.local/k8s-batch:1.0.0-alpha.28";
 		std::string cd;
 		std::string cmd;
 		std::string args;
 		std::map<std::string, std::string> envs;
 
-		std::set<std::string> imagePullSecrets = {{"tsco-docker-private-images"}, {"tsco-docker-public-images"}};
-		std::string resourcesRequestsCPU = "100m";
-		std::string resourcesRequestsMemory = "100Mi";
-		std::string resourcesLimitsCPU = "100m";
-		std::string resourcesLimitsMemory = "100Mi";
-		std::map<std::string, std::vector<Volume>> volumes = { {{"secret-mounts"}, {{"secret", "k8s-batch", "esl-logger", "logger.xml"}, {"secret", "k8s-batch", "rose-db", "rose-db.xml"}}} };
-		std::vector<Mount> mounts = { {"/opt/etc/logger.xml", "secret-mounts", "logger.xml", true}, {"/opt/etc/rose-db.xml", "secret-mounts", "rose-db.xml", true}};
+		std::string yamlFile;
+		std::string kubectlCmd;
+		std::string kubectlConfig;
+		std::string image;
+		std::string metaNamespace;
+		int backoffLimit = 0;
+		std::string serviceAccountName;
+		std::set<std::string> imagePullSecrets;
+		std::string resourcesRequestsCPU;
+		std::string resourcesRequestsMemory;
+		std::string resourcesLimitsCPU;
+		std::string resourcesLimitsMemory;
+		std::map<std::string, std::vector<TaskFactory::Settings::Volume>> volumes;
+		std::vector<TaskFactory::Settings::Mount> mounts;
 
 	};
 
@@ -104,19 +85,19 @@ private:
 	std::mutex& taskStatusMutex;
 	Status status;
 
-	std::vector<std::pair<std::string, std::string>> metrics;
 	Settings settings;
 
 	std::thread thread;
 
 	void run();
 
-	std::unique_ptr<esl::system::Process> getProcess() const;
 	std::string getCmd() const noexcept;
 	Status runBatch() const noexcept;
 	void sendCancel() const noexcept;
 	std::string getDeploymentYAML() const noexcept;
 	Status getPodStatus();
+	Status getJobStatus();
+	Status getEventStatus();
 };
 
 } /* namespace kubectl */

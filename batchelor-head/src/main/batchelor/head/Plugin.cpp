@@ -16,12 +16,9 @@
  * License along with Batchelor.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <batchelor/common/Plugin.h>
+
 #include <batchelor/head/Plugin.h>
-#include <batchelor/head/plugin/basic/Socket.h>
-//#include <batchelor/head/plugin/Observer.h>
-//#include <batchelor/head/plugin/rose/Observer.h>
-//#include <batchelor/head/plugin/slave/Observer.h>
-#include <batchelor/head/plugin/Socket.h>
 #include <batchelor/head/RequestHandler.h>
 
 namespace batchelor {
@@ -30,14 +27,9 @@ namespace head {
 void Plugin::install(esl::plugin::Registry& registry, const char* data) {
 	esl::plugin::Registry::set(registry);
 
-	//common::Plugin::install(esl::plugin::Registry::get(), nullptr);
+	common::Plugin::install(esl::plugin::Registry::get(), nullptr);
 
 	registry.addPlugin("batchelor-head", RequestHandler::create);
-
-	// ---------------------------------------
-
-	registry.addPlugin("basic", plugin::basic::Socket::create);
-	registry.addPlugin<esl::object::Object, plugin::Socket, plugin::basic::Socket::create>("batchelor-head-basic");
 }
 
 } /* namespace head */

@@ -23,6 +23,7 @@
 #include <batchelor/head/Procedure.h>
 
 #include <esl/object/SimpleContext.h>
+#include <esl/plugin/Registry.h>
 
 namespace batchelor {
 namespace head {

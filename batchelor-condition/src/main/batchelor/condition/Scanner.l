@@ -4,25 +4,35 @@
 #include <string>
  
 /* Implementation of yyFlexScanner */ 
-#include <batchelor/condition/Driver.h>
+#include <batchelor/condition/Compiler.h>
 #include <batchelor/condition/Scanner.h>
+
+namespace batchelor {
+namespace condition {
+
+Scanner::Scanner(std::istream& in)
+: yyFlexLexer(in, std::cout)
+{ };
+
+} /* namespace condition */
+} /* namespace batchelor */
+
 
 /* msvc2010 requires that we exclude this header file. */
 #define YY_NO_UNISTD_H
 
 #undef  YY_DECL
-#define YY_DECL int batchelor::condition::Scanner::lexer(batchelor::condition::Parser::semantic_type* const aSemanticType, batchelor::condition::Parser::location_type* location, batchelor::condition::Driver& driver)
+#define YY_DECL int batchelor::condition::Scanner::fetchNextToken(void* const semanticType, void* location, batchelor::condition::Compiler& compiler)
 
 /* update location on matching */
+/*
 #define YY_USER_ACTION \
   location->step(); \
   location->columns(yyleng);
-
-/* typedef to make the returns for the tokens shorter */
-using token = batchelor::condition::Parser::token;
+*/
 
 /* define yyterminate as this instead of NULL */
-//#define yyterminate() return( token::END )
+//#define yyterminate() return( END )
 
 %}
 
@@ -39,52 +49,49 @@ STR     \"([][a-zA-Z0-9 !�$%&/()={}_]|\.|(\\\"))*\"
 %%
 
 %{          /** Code executed at the beginning of lexer(...) **/
-            semanticType = aSemanticType;
+            //semanticType = aSemanticType;
 %}
 
 \n          {
                // Update line number
-               location->lines();
+               //location->lines();
+               compiler.doSomething();
             }
 
 {NUM}                     {
-                            semanticType->emplace<double>(std::atof(YYText()));
-                            return token::NUMBER;
+                            //semanticType->emplace<double>(std::atof(YYText()));
+                            return NUMBER;
                           }
 
 {STR}                     {
                             std::string str(YYText());
-                            semanticType->emplace<std::string>(str.substr(1, str.size()-2));
-                            return token::STRING;
+                            //semanticType->emplace<std::string>(str.substr(1, str.size()-2));
+                            return STRING;
                           }
 
 &&                        {
-                            return token::IDENTIFIER_AND;
+                            return IDENTIFIER_AND;
                           }
 
 \|\|                      {
-                            return token::IDENTIFIER_OR;
+                            return IDENTIFIER_OR;
                           }
 
 [a-zA-Z][a-zA-Z0-9_]*     {
                             std::string str(YYText());
                             if(str == "proc")
-                              return token::IDENTIFIER_PROC;
+                              return IDENTIFIER_PROC;
 
                             if(str == "var")
-                              return token::IDENTIFIER_VAR;
+                              return IDENTIFIER_VAR;
 
                             if(str == "true")
-                              return token::IDENTIFIER_TRUE;
+                              return IDENTIFIER_TRUE;
 
                             if(str == "false")
-                              return token::IDENTIFIER_FALSE;
+                              return IDENTIFIER_FALSE;
 
-                            semanticType->emplace<std::string>(str);
-                            semanticType->build<std::string>(yytext);
-                            auto identifierType = driver.getIdentifierType(yytext);
-                            
-                            return identifierType == Driver::IdentifierType::itUnknown ? token::IDENTIFIER : token::IDENTIFIER;
+                            return IDENTIFIER;
                           }
 
 
@@ -92,7 +99,7 @@ STR     \"([][a-zA-Z0-9 !�$%&/()={}_]|\.|(\\\"))*\"
 
 .                         {
                             //semanticType->emplace<char>(YYText()[0]);
-                            //return token::CHAR;
+                            //return CHAR;
                             return yytext[0];
                           }
 

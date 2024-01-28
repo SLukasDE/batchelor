@@ -1,7 +1,7 @@
-#ifndef BATCHELOR_HEAD_PLUGIN_BASIC_SOCKET_H_
-#define BATCHELOR_HEAD_PLUGIN_BASIC_SOCKET_H_
+#ifndef BATCHELOR_COMMON_PLUGIN_BASIC_SOCKET_H_
+#define BATCHELOR_COMMON_PLUGIN_BASIC_SOCKET_H_
 
-#include <batchelor/head/plugin/Socket.h>
+#include <batchelor/common/plugin/Socket.h>
 
 #include <esl/com/http/server/Socket.h>
 
@@ -11,7 +11,7 @@
 #include <vector>
 
 namespace batchelor {
-namespace head {
+namespace common {
 namespace plugin {
 namespace basic {
 
@@ -29,7 +29,7 @@ private:
 
 } /* namespace basic */
 } /* namespace plugin */
-} /* namespace head */
+} /* namespace common */
 } /* namespace batchelor */
 
-#endif /* BATCHELOR_HEAD_PLUGIN_BASIC_SOCKET_H_ */
+#endif /* BATCHELOR_COMMON_PLUGIN_BASIC_SOCKET_H_ */

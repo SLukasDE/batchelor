@@ -5,38 +5,53 @@
 #include <FlexLexer.h>
 #endif
 
-#include <batchelor/condition/Parser.h>
-//#include <batchelor/condition/location.hh>
-
 #include <istream>
 
 namespace batchelor {
 namespace condition {
 
+class Compiler;
+
 class Scanner : public yyFlexLexer {
 public:
 	Scanner(std::istream& in);
+	virtual ~Scanner() = default;
 
 	//get rid of override virtual function warning
 	//using FlexLexer::yylex;
 
-	/* Calling "flex Lexer.l" should generate the Implementation of this method
-	 * but it will generate a Function/Method in Lexer.cpp started with YY_DECL ...
+	/* Calling "flex Scanner.l" should generate the Implementation of this method
+	 * but it will generate a Function/Method in Scanner.cpp started with YY_DECL ...
 	 *
-	 * But you will find as well the folling "#define" in Lexer.l that will make our result as we want:
-	 * #define YY_DECL int batchelor::condition::Scanner::lexer(batchelor::condition::Parser::semantic_type* const lval, batchelor::condition::Parser::location_type* loc, batchelor::condition::Driver& driver)
+	 * Thus, you will find as well the following "#define" in Scanner.l that will make our result as we want:
+     * #define YY_DECL int batchelor::parser::Scanner::fetchNextToken(batchelor::parser::Compiler& compiler)
+	 * //#define YY_DECL int batchelor::parser::Scanner::fetchNextToken(batchelor::parser::Parser::semantic_type* const lval, batchelor::parser::Parser::location_type* loc, batchelor::parser::Compiler& compiler)
 	 *
-	 * To make the parser calling Scanner::lexer(...) instead of ::yylex(...) there is another definition in Parser.yy:
-	 * #define yylex scanner.lexer
+	 * To make the parser calling Scanner::fetchNextToken(...) instead of ::yylex(...) there is another definition in Parser.yy:
+	 * #define yylex scanner.fetchNextToken
 	 */
-	int lexer(Parser::semantic_type* const semanticType, Parser::location_type* location, batchelor::condition::Driver& driver);
-	// YY_DECL defined in Lexer.l
-	// Method body created by flex in Lexer.cpp
+	//virtual int fetchNextToken(Compiler& compiler);
+	virtual int fetchNextToken(void* const semanticType, void* location, Compiler& Compiler);
+	/*
+	int Scanner::fetchNextToken(void* const aSemanticType, void* aLocation, Compiler& Compiler) {
+		Parser::semantic_type* const semanticType = static_cast<Parser::semantic_type* const>(aSemanticType);
+		Parser::location_type* location = static_cast<Parser::location_type*>(aLocation);
+	}
+	 */
 
+	static const int IDENTIFIER = 256;
+	static const int IDENTIFIER_TRUE = 257;
+	static const int IDENTIFIER_FALSE = 258;
+	static const int IDENTIFIER_VAR = 259;
+	static const int IDENTIFIER_PROC = 260;
+	static const int IDENTIFIER_OR = 261;
+	static const int IDENTIFIER_AND = 262;
+
+	static const int STRING = 263;
+	static const int NUMBER = 264;
 
 private:
 	/* yyval ptr */
-	Parser::semantic_type* semanticType = nullptr;
 };
 
 } /* namespace condition */

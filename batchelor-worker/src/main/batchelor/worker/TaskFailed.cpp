@@ -24,7 +24,8 @@ namespace batchelor {
 namespace worker {
 
 TaskFailed::TaskFailed(plugin::Task::Status aStatus)
-: status(std::move(aStatus))
+: plugin::Task({}),
+  status(std::move(aStatus))
 { }
 
 plugin::Task::Status TaskFailed::getStatus() const {

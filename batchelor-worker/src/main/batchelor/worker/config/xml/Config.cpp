@@ -89,32 +89,6 @@ Config::Setting::Setting(Procedure::Settings& settings, const std::string& filen
 			throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Invalid value \"" + std::string(settings.namespaceId) + "\" for parameter \"" + key + "\"."));
 		}
 	}
-	else if(key == "maximum-tasks-running") {
-		if(settings.maximumTasksRunning != std::string::npos) {
-			throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Multiple definition of parameter \"" + key + "\"."));
-		}
-
-		int v = 0;
-
-		try {
-			v = std::stoi(evaluate(value, language));
-		}
-		catch(const std::invalid_argument& e) {
-			throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Invalid value \"" + std::string(value) + "\" for parameter \"" + key + "\"."));
-		}
-		catch(const std::out_of_range& e) {
-			throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Value \"" + std::string(value) + "\" for parameter \"" + key + "\" is out of range."));
-		}
-		if(v <= 0) {
-			throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Value \"" + std::string(value) + "\" for parameter \"" + key + "\" is negative."));
-		}
-
-		settings.maximumTasksRunning = v;
-
-		if(settings.maximumTasksRunning == std::string::npos) {
-			throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Value of setting \"" + key + "\" must be equal or greater than 0, but lower than " + std::to_string(std::string::npos) + "."));
-		}
-	}
 	else if(key == "idle-timeout") {
 		if(settings.idleTimeout.count() == 0) {
 			throw esl::io::FilePosition::add(getFilename(), getLineNo(), std::runtime_error("Multiple definition of parameter \"" + key + "\"."));

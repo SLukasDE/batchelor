@@ -115,8 +115,11 @@ void Config::printUsage() {
 	std::cout << "  show-task    Shows all details of the given task.\n";
 	std::cout << "  show-tasks   Shows a list with some attributes of tasks that matches the given criteria.\n";
 	std::cout << "\n";
-	std::cout << "OPTIONS specific for command 'send-event':\n";
+	std::cout << "General OPTIONS:\n";
 	std::cout << "  -N, --namespace        <namespace-id>   Specifies the used namespace for all commands.\n";
+	std::cout << "\n";
+	std::cout << "OPTIONS specific for command 'send-event':\n";
+	std::cout << "  -m, --metric           <key> <value>    Specifies metrics to be processed by the tasks.\n";
 	std::cout << "  -e, --event-type       <event-type>     Tells the severs which kind of event has to be processed.\n";
 	std::cout << "                                          There must be at least one active worker that is processing this event.\n";
 	std::cout << "  -p, --priority         <priority>       Tells the head to process this event with a specific priority. Default value is 0.\n";
@@ -191,6 +194,10 @@ Config::Config(esl::object::Context& aContext, Procedure::Settings& aSettings, i
 		else if(currentArg == "-p"  || currentArg == "--priority") {
 			setPriority(i+1 < argc ? argv[i+1] : nullptr);
 			++i;
+		}
+		else if(currentArg == "-m"  || currentArg == "--metric") {
+			addMetric(i+1 < argc ? argv[i+1] : nullptr, i+2 < argc ? argv[i+2] : nullptr);
+			i = i+2;
 		}
 		else if(currentArg == "-s"  || currentArg == "--setting") {
 			addSetting(i+1 < argc ? argv[i+1] : nullptr, i+2 < argc ? argv[i+2] : nullptr);
@@ -443,6 +450,17 @@ void Config::setPriority(const char* aPriority) {
 	}
 }
 
+void Config::addMetric(const char* aKey, const char* aValue) {
+	if(!aKey) {
+		throw ArgumentsException("Key missing of option \"--metric\".");
+	}
+	if(!aValue) {
+		throw ArgumentsException("Value missing of option \"--metric\".");
+	}
+
+	settings.metrics.emplace_back(std::make_pair(std::string(aKey), std::string(aValue)));
+}
+
 void Config::addSetting(const char* aKey, const char* aValue) {
 	if(!aKey) {
 		throw ArgumentsException("Key missing of option \"--setting\".");
@@ -608,42 +626,7 @@ void Config::addConnectionFile(const char* value) {
 	}
 	configFiles.push_back(value);
 }
-/*
-void Config::addConfigFile(const char* value) {
-	if(!value) {
-		throw ArgumentsException("Value missing of option \"--config-file\".");
-	}
-	configFiles.push_back(value);
-}
-*/
-/*
-void Config::setUsername(const char* value) {
-	if(!value) {
-		throw ArgumentsException("Value missing of option \"--username\".");
-	}
-	currentUsername = value;
-}
 
-void Config::setPassword(const char* value) {
-	if(!value) {
-		throw ArgumentsException("Value missing of option \"--password\".");
-	}
-	currentPassword = value;
-}
-
-void Config::addURL(const char* value) {
-	if(!value) {
-		throw ArgumentsException("Value missing of option \"--server-url\".");
-	}
-
-	common::config::Server server;
-	server.username = currentUsername;
-	server.password = currentPassword;
-	server.url = value;
-
-	settings.servers.push_back(server);
-}
-*/
 } /* namespace args */
 } /* namespace config */
 } /* namespace control */

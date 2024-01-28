@@ -46,7 +46,6 @@ void Config::printUsage() {
 	std::cout << "  -N, --namespace             <namespace-id>  Specifies the used namespace for all commands.\n";
 	std::cout << "  -W, --worker-id             <value>         Set ID of worker to the specified value.\n";
 	std::cout << "                                              If this value  is not set, worker-id is set to a random UUID string.\n";
-	std::cout << "  -T, --maximum-tasks-running <value>         Limits maximum number of tasks running at the same time.\n";
 	std::cout << "  -I, --idle-timeout          <value>         Specifies a timeout to exit the worker. Its value must be greater than zero seconds.\n";
 	std::cout << "                                              The worker will exit after it is idle for this duration. Valid values are:\n";
 	std::cout << "                                              * <number>[ms]      e.g. 100000ms for 100.000 milliseconds.\n";
@@ -69,9 +68,6 @@ void Config::printUsage() {
 	std::cout << "                                            Subsequent settings specified by \"--setting\" are specific to the chosen plugin.\n";
 	std::cout << "\n";
 	std::cout << "                                            Most popular used plugin is \"exec\" with following settings:\n";
-	std::cout << "                                            * maximum-tasks-running: <number>\n";
-	std::cout << "                                            * metrics-policy:        allow|deny\n";
-	std::cout << "                                            * metric:                <metric-id>\n";
 	std::cout << "                                            * args:                  <arguments to call 'cmd'>\n";
 	std::cout << "                                            * args-flag:             override|extend|fixed\n";
 	std::cout << "                                            * env:                   <key=value>\n";
@@ -118,10 +114,6 @@ Config::Config(esl::object::Context& aContext, Procedure::Settings& aSettings, i
 		}
 		else if(currentArg == "-N"  || currentArg == "--namespace") {
 			setNamespaceId(i+1 < argc ? argv[i+1] : nullptr);
-			++i;
-		}
-		else if(currentArg == "-T"  || currentArg == "--maximum-tasks-running") {
-			setMaximumTasksRunning(i+1 < argc ? argv[i+1] : nullptr);
 			++i;
 		}
 		else if(currentArg == "-I"  || currentArg == "--idle-timeout") {
@@ -203,22 +195,6 @@ void Config::setNamespaceId(const char* namespaceId) {
 	setSettingState(SettingsState::event);
 
 	settings.namespaceId = namespaceId;
-}
-
-void Config::setMaximumTasksRunning(const char* aMaximumTasksRunning) {
-	if(settings.maximumTasksRunning != std::string::npos) {
-		throw ArgumentsException("Multiple specification of option \"--maximum-tasks-running\" is not allowed.");
-	}
-	if(!aMaximumTasksRunning) {
-		throw ArgumentsException("Value missing of option \"--maximum-tasks-running\".");
-	}
-
-	try {
-		settings.maximumTasksRunning = String::toNumber<std::size_t>(aMaximumTasksRunning);
-	}
-	catch(const std::exception& e) {
-		throw ArgumentsException("Value of option \"--maximum-tasks-running\" must be equal or greater than 0, but lower than " + std::string(aMaximumTasksRunning) + ". " + e.what());
-	}
 }
 
 void Config::setIdleTimeout(const char* idleTimeout) {

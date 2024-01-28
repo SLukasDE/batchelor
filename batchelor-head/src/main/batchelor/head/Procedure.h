@@ -21,8 +21,8 @@
 
 #include <batchelor/common/Procedure.h>
 
+#include <batchelor/common/plugin/Socket.h>
 #include <batchelor/head/plugin/Observer.h>
-#include <batchelor/head/plugin/Socket.h>
 
 #include <esl/com/http/server/RequestHandler.h>
 #include <esl/object/Context.h>
@@ -45,7 +45,7 @@ class Procedure : public common::Procedure {
 public:
 	struct Settings {
 		Settings() = default;
-		Settings(const std::vector<std::pair<std::string, std::string>>& settings);
+		//Settings(const std::vector<std::pair<std::string, std::string>>& settings);
 
 		enum class Role {
 			readOnly,
@@ -88,11 +88,11 @@ private:
 		InitializedSettings(esl::object::Context& context, const Settings& settings);
 
 		std::map<std::string, std::reference_wrapper<plugin::Observer>> observers;
-		std::map<std::string, std::reference_wrapper<plugin::Socket>> sockets;
+		std::map<std::string, std::reference_wrapper<common::plugin::Socket>> sockets;
 		std::unique_ptr<esl::com::http::server::RequestHandler> requestHandler;
 	};
 
-	const Settings& settings;
+	const Settings settings;
 	std::unique_ptr<InitializedSettings> initializedSettings;
 	std::mutex mutex;
 	std::atomic<unsigned int> listeners{0};

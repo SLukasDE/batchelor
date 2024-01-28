@@ -21,6 +21,7 @@
 #include <batchelor/worker/plugin/kubectl/TaskFactory.h>
 
 #include <esl/system/Stacktrace.h>
+#include <esl/utility/String.h>
 
 #include <stdexcept>
 
@@ -54,16 +55,18 @@ std::unique_ptr<plugin::TaskFactory> TaskFactory::create(const std::vector<std::
 	bool hasEnvFlag = false;
 	bool hasCdFlag = false;
 	bool hasCmdFlag = false;
+	bool hasBackoffLimit = false;
+
+	Settings::Volume* volumePtr = nullptr;
+	Settings::Mount* mountPtr = nullptr;
 
 	for(const auto& setting : aSettings) {
-		if(setting.first == "maximum-tasks-running") {
-		    //<setting key="maximum-tasks-running" value="3"/>
-			if(settings.maximumTasksRunning != 0) {
-				throw std::runtime_error("Multiple definition of parameter \"" + setting.first + "\"");
-			}
-			int maximumJobsRunning = 0;
+		if(setting.first.size() > 18 && setting.first.substr(0, 18) == "resource-required.") {
+			std::string key = setting.first.substr(18);
+			int value = 0;
+
 			try {
-				maximumJobsRunning = std::stoi(setting.second);
+				value = std::stoi(setting.second);
 			}
 			catch(const std::invalid_argument& e) {
 				throw std::runtime_error("Invalid value \"" + setting.second + "\" for parameter \"" + setting.first + "\"");
@@ -71,33 +74,14 @@ std::unique_ptr<plugin::TaskFactory> TaskFactory::create(const std::vector<std::
 			catch(const std::out_of_range& e) {
 				throw std::runtime_error("Value \"" + setting.second + "\" for parameter \"" + setting.first + "\" is out of range.");
 			}
-			if(maximumJobsRunning <= 0) {
+			if(value <= 0) {
 				throw std::runtime_error("Value for parameter \"" + setting.first + "\" must be greater than 0 but it is \"" + setting.second + "\"");
 			}
-			settings.maximumTasksRunning = static_cast<std::size_t>(maximumJobsRunning);
-		}
-		/*
-		else if(setting.first == "metrics-policy") {
-			if(hasMetricsPolicy) {
-				throw std::runtime_error("Multiple definition of attribute \"metrics-policy\".");
-			}
 
-			hasMetricsPolicy = true;
-
-			if(setting.second == "allow") {
-				settings.metricsPolicy = MetricsPolicy::allow;
-			}
-			else if(setting.second == "deny") {
-				settings.metricsPolicy = MetricsPolicy::deny;
-			}
-			else {
-				throw std::runtime_error("Value \"" + setting.second + "\" of attribute 'metrics-policy' is invalid");
+			if(settings.resourcesRequired.insert(std::make_pair(key, value)).second == false) {
+				throw std::runtime_error("Multiple definition of parameter \"" + setting.first + "\"");
 			}
 		}
-		else if(setting.first == "metric") {
-			settings.metrics.insert(setting.second);
-		}
-		*/
 		else if(setting.first == "args") {
 		    //<setting key="args" value="--propertyId=Bla --propertyFile=/wxx/secret/property.cfg"/>
 			if(hasArgs) {
@@ -225,6 +209,235 @@ std::unique_ptr<plugin::TaskFactory> TaskFactory::create(const std::vector<std::
 				throw std::runtime_error("Invalid value \"" + setting.second + "\" for parameter \"" + setting.first + "\"");
 			}
 		}
+		else if(setting.first == "yaml-file") {
+		    //<setting key="yaml-file" value="./kube/kubectl"/>
+			if(!settings.yamlFile.empty()) {
+				throw esl::system::Stacktrace::add(std::runtime_error("Multiple definition of parameter \"" + setting.first + "\""));
+			}
+			settings.yamlFile = setting.second;
+			if(settings.yamlFile.empty()) {
+				throw std::runtime_error("Invalid value \"" + setting.second + "\" for parameter \"" + setting.first + "\"");
+			}
+		}
+		else if(setting.first == "kubectl-cmd") {
+		    //<setting key="kubectl-cmd" value="./kube/kubectl"/>
+			if(!settings.kubectlCmd.empty()) {
+				throw esl::system::Stacktrace::add(std::runtime_error("Multiple definition of parameter \"" + setting.first + "\""));
+			}
+			settings.kubectlCmd = setting.second;
+			if(settings.kubectlCmd.empty()) {
+				throw std::runtime_error("Invalid value \"" + setting.second + "\" for parameter \"" + setting.first + "\"");
+			}
+		}
+		else if(setting.first == "kubectl-config") {
+		    //<setting key="kubectl-config" value="./kube/dev-level-1.yaml"/>
+			if(!settings.kubectlConfig.empty()) {
+				throw esl::system::Stacktrace::add(std::runtime_error("Multiple definition of parameter \"" + setting.first + "\""));
+			}
+			settings.kubectlConfig = setting.second;
+			if(settings.kubectlConfig.empty()) {
+				throw std::runtime_error("Invalid value \"" + setting.second + "\" for parameter \"" + setting.first + "\"");
+			}
+		}
+		else if(setting.first == "image") {
+		    //<setting key="image" value="tsco-docker-private-images.artifactory.rewe.local/k8s-batch:1.0.0-alpha.28"/>
+			if(!settings.image.empty()) {
+				throw esl::system::Stacktrace::add(std::runtime_error("Multiple definition of parameter \"" + setting.first + "\""));
+			}
+			settings.image = setting.second;
+			if(settings.image.empty()) {
+				throw std::runtime_error("Invalid value \"" + setting.second + "\" for parameter \"" + setting.first + "\"");
+			}
+		}
+		else if(setting.first == "namespace") {
+		    //<setting key="namespace" value="tsco"/>
+			if(!settings.metaNamespace.empty()) {
+				throw esl::system::Stacktrace::add(std::runtime_error("Multiple definition of parameter \"" + setting.first + "\""));
+			}
+			settings.metaNamespace = setting.second;
+			if(settings.metaNamespace.empty()) {
+				throw std::runtime_error("Invalid value \"" + setting.second + "\" for parameter \"" + setting.first + "\"");
+			}
+		}
+		else if(setting.first == "backoff-limit") {
+			if(hasBackoffLimit) {
+				throw esl::system::Stacktrace::add(std::runtime_error("Multiple definition of parameter \"" + setting.first + "\""));
+			}
+			hasBackoffLimit = true;
+
+			try {
+				settings.backoffLimit = std::stoi(setting.second);
+			}
+			catch(const std::invalid_argument& e) {
+				throw std::runtime_error("Invalid value \"" + setting.second + "\" for parameter \"" + setting.first + "\"");
+			}
+			catch(const std::out_of_range& e) {
+				throw std::runtime_error("Value \"" + setting.second + "\" for parameter \"" + setting.first + "\" is out of range.");
+			}
+			if(settings.backoffLimit <= 0) {
+				throw std::runtime_error("Value \"" + setting.second + "\" for parameter \"" + setting.first + "\" is out of range.");
+			}
+		}
+		else if(setting.first == "service-account-name") {
+		    //<setting key="service-account-name" value=""/>
+			if(!settings.serviceAccountName.empty()) {
+				throw esl::system::Stacktrace::add(std::runtime_error("Multiple definition of parameter \"" + setting.first + "\""));
+			}
+			settings.serviceAccountName = setting.second;
+			if(settings.serviceAccountName.empty()) {
+				throw std::runtime_error("Invalid value \"" + setting.second + "\" for parameter \"" + setting.first + "\"");
+			}
+		}
+		else if(setting.first == "image-pull-secret") {
+		    //<setting key="image-pull-secret" value="tsco-docker-private-images"/>
+		    //<setting key="image-pull-secret" value="tsco-docker-public-images"/>
+			if(setting.second.empty()) {
+				throw std::runtime_error("Invalid value \"" + setting.second + "\" for parameter \"" + setting.first + "\"");
+			}
+			settings.imagePullSecrets.insert(setting.second);
+		}
+		else if(setting.first == "resources-requests-cpu") {
+		    //<setting key="resources-requests-cpu" value="100m"/>
+			if(!settings.resourcesRequestsCPU.empty()) {
+				throw esl::system::Stacktrace::add(std::runtime_error("Multiple definition of parameter \"" + setting.first + "\""));
+			}
+			settings.resourcesRequestsCPU = setting.second;
+			if(settings.resourcesRequestsCPU.empty()) {
+				throw std::runtime_error("Invalid value \"" + setting.second + "\" for parameter \"" + setting.first + "\"");
+			}
+		}
+		else if(setting.first == "resources-requests-memory") {
+		    //<setting key="resources-requests-memory" value="100Mi"/>
+			if(!settings.resourcesRequestsMemory.empty()) {
+				throw esl::system::Stacktrace::add(std::runtime_error("Multiple definition of parameter \"" + setting.first + "\""));
+			}
+			settings.resourcesRequestsMemory = setting.second;
+			if(settings.resourcesRequestsMemory.empty()) {
+				throw std::runtime_error("Invalid value \"" + setting.second + "\" for parameter \"" + setting.first + "\"");
+			}
+		}
+		else if(setting.first == "resources-limits-cpu") {
+		    //<setting key="resources-limits-cpu" value="100m"/>
+			if(!settings.resourcesLimitsCPU.empty()) {
+				throw esl::system::Stacktrace::add(std::runtime_error("Multiple definition of parameter \"" + setting.first + "\""));
+			}
+			settings.resourcesLimitsCPU = setting.second;
+			if(settings.resourcesLimitsCPU.empty()) {
+				throw std::runtime_error("Invalid value \"" + setting.second + "\" for parameter \"" + setting.first + "\"");
+			}
+		}
+		else if(setting.first == "resources-limits-memory") {
+		    //<setting key="resources-limits-memory" value="100Mi"/>
+			if(!settings.resourcesLimitsMemory.empty()) {
+				throw esl::system::Stacktrace::add(std::runtime_error("Multiple definition of parameter \"" + setting.first + "\""));
+			}
+			settings.resourcesLimitsMemory = setting.second;
+			if(settings.resourcesLimitsMemory.empty()) {
+				throw std::runtime_error("Invalid value \"" + setting.second + "\" for parameter \"" + setting.first + "\"");
+			}
+		}
+
+		else if(setting.first == "volume.id") {
+			if(setting.second.empty()) {
+				throw std::runtime_error("Invalid value \"" + setting.second + "\" for parameter \"" + setting.first + "\"");
+			}
+			std::vector<Settings::Volume>& volumes = settings.volumes[setting.second];
+			volumes.push_back(Settings::Volume());
+			volumePtr = &volumes.back();
+		}
+		else if(setting.first == "volume.kind") {
+			if(!volumePtr) {
+				throw std::runtime_error("Invalid value \"" + setting.second + "\" for parameter \"" + setting.first + "\" because parameter 'volume.id' is missing");
+			}
+			if(setting.second.empty()) {
+				throw std::runtime_error("Invalid value \"" + setting.second + "\" for parameter \"" + setting.first + "\"");
+			}
+
+			if(!volumePtr->kind.empty()) {
+				throw esl::system::Stacktrace::add(std::runtime_error("Multiple definition of parameter \"" + setting.first + "\""));
+			}
+			volumePtr->kind = setting.second;
+		}
+		else if(setting.first == "volume.name") {
+			if(!volumePtr) {
+				throw std::runtime_error("Invalid value \"" + setting.second + "\" for parameter \"" + setting.first + "\" because parameter 'volume.id' is missing");
+			}
+			if(setting.second.empty()) {
+				throw std::runtime_error("Invalid value \"" + setting.second + "\" for parameter \"" + setting.first + "\"");
+			}
+
+			if(!volumePtr->name.empty()) {
+				throw esl::system::Stacktrace::add(std::runtime_error("Multiple definition of parameter \"" + setting.first + "\""));
+			}
+			volumePtr->name = setting.second;
+		}
+		else if(setting.first == "volume.key") {
+			if(!volumePtr) {
+				throw std::runtime_error("Invalid value \"" + setting.second + "\" for parameter \"" + setting.first + "\" because parameter 'volume.id' is missing");
+			}
+			if(setting.second.empty()) {
+				throw std::runtime_error("Invalid value \"" + setting.second + "\" for parameter \"" + setting.first + "\"");
+			}
+
+			if(!volumePtr->key.empty()) {
+				throw esl::system::Stacktrace::add(std::runtime_error("Multiple definition of parameter \"" + setting.first + "\""));
+			}
+			volumePtr->key = setting.second;
+		}
+		else if(setting.first == "volume.path") {
+			if(!volumePtr) {
+				throw std::runtime_error("Invalid value \"" + setting.second + "\" for parameter \"" + setting.first + "\" because parameter 'volume.id' is missing");
+			}
+			if(setting.second.empty()) {
+				throw std::runtime_error("Invalid value \"" + setting.second + "\" for parameter \"" + setting.first + "\"");
+			}
+
+			if(!volumePtr->path.empty()) {
+				throw esl::system::Stacktrace::add(std::runtime_error("Multiple definition of parameter \"" + setting.first + "\""));
+			}
+			volumePtr->path = setting.second;
+		}
+
+		else if(setting.first == "mount.id") {
+			if(setting.second.empty()) {
+				throw std::runtime_error("Invalid value \"" + setting.second + "\" for parameter \"" + setting.first + "\"");
+			}
+			settings.mounts.push_back(Settings::Mount());
+			mountPtr = &settings.mounts.back();
+			mountPtr->name = setting.second;
+		}
+		else if(setting.first == "mount.mount-path") {
+			if(!mountPtr) {
+				throw std::runtime_error("Invalid value \"" + setting.second + "\" for parameter \"" + setting.first + "\" because parameter 'mount.id' is missing");
+			}
+			if(setting.second.empty()) {
+				throw std::runtime_error("Invalid value \"" + setting.second + "\" for parameter \"" + setting.first + "\"");
+			}
+
+			if(!mountPtr->mountPath.empty()) {
+				throw esl::system::Stacktrace::add(std::runtime_error("Multiple definition of parameter \"" + setting.first + "\""));
+			}
+			mountPtr->mountPath = setting.second;
+		}
+		else if(setting.first == "mount.sub-path") {
+			if(!mountPtr) {
+				throw std::runtime_error("Invalid value \"" + setting.second + "\" for parameter \"" + setting.first + "\" because parameter 'mount.id' is missing");
+			}
+			if(setting.second.empty()) {
+				throw std::runtime_error("Invalid value \"" + setting.second + "\" for parameter \"" + setting.first + "\"");
+			}
+
+			if(!mountPtr->subPath.empty()) {
+				throw esl::system::Stacktrace::add(std::runtime_error("Multiple definition of parameter \"" + setting.first + "\""));
+			}
+			mountPtr->subPath = setting.second;
+		}
+		else if(setting.first == "mount.read-only") {
+			if(!mountPtr) {
+				throw std::runtime_error("Invalid value \"" + setting.second + "\" for parameter \"" + setting.first + "\" because parameter 'mount.id' is missing");
+			}
+			mountPtr->readOnly = esl::utility::String::toBool(setting.second);
+		}
 		else {
 			throw esl::system::Stacktrace::add(std::runtime_error("Unknown parameter key=\"" + setting.first + "\" with value=\"" + setting.second + "\""));
 		}
@@ -238,6 +451,34 @@ std::unique_ptr<plugin::TaskFactory> TaskFactory::create(const std::vector<std::
 		throw std::runtime_error("Definition of parameter \"cmd\" is required because parameter is flagged as 'fixed'");
 	}
 
+	if(settings.kubectlCmd.empty()) {
+		throw std::runtime_error("Definition of parameter \"kubectl-cmd\" is missing.");
+	}
+/*
+	if(settings.kubectlConfig.empty()) {
+		throw std::runtime_error("Definition of parameter \"kubectl-config\" is missing.");
+	}
+*/
+	if(settings.image.empty()) {
+		throw std::runtime_error("Definition of parameter \"image\" is missing.");
+	}
+
+	if(settings.resourcesRequestsCPU.empty()) {
+		throw std::runtime_error("Definition of parameter \"resources-requests-cpu\" is missing.");
+	}
+
+	if(settings.resourcesRequestsMemory.empty()) {
+		throw std::runtime_error("Definition of parameter \"resources-requests-memory\" is missing.");
+	}
+
+	if(settings.resourcesLimitsCPU.empty()) {
+		throw std::runtime_error("Definition of parameter \"resources-limits-cpu\" is missing.");
+	}
+
+	if(settings.resourcesLimitsMemory.empty()) {
+		throw std::runtime_error("Definition of parameter \"resources-limits-memory\" is missing.");
+	}
+
 	return std::unique_ptr<plugin::TaskFactory>(new TaskFactory(std::move(settings)));
 }
 
@@ -246,19 +487,18 @@ const std::map<std::string, int>& TaskFactory::getResourcesRequired() const {
 }
 
 bool TaskFactory::isBusy(const std::map<std::string, int>& resourcesAvailable) {
-	if(settings.maximumTasksRunning > 0 && tasksRunning >= settings.maximumTasksRunning) {
-		return true;
+	for(const auto& resourceRequired : settings.resourcesRequired) {
+		auto resourceAvailable = resourcesAvailable.find(resourceRequired.first);
+		if(resourceAvailable == resourcesAvailable.end() || resourceAvailable->second < resourceRequired.second) {
+			return true;
+		}
 	}
+
 	return false;
 }
 
 std::unique_ptr<plugin::Task> TaskFactory::createTask(std::condition_variable& notifyCV, std::mutex& notifyMutex, const std::vector<std::pair<std::string, std::string>>& metrics, const service::schemas::RunConfiguration& runConfiguration) {
-	++tasksRunning;
 	return std::unique_ptr<Task>(new Task(*this, notifyCV, notifyMutex, metrics, settings, runConfiguration));
-}
-
-void TaskFactory::releaseProcess() {
-	--tasksRunning;
 }
 
 } /* namespace kubectl */

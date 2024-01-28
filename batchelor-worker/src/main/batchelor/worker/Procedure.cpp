@@ -94,6 +94,16 @@ private:
     bool empty = true;
 };
 
+void addOrReplaceMetric(std::vector<std::pair<std::string, std::string>>& metrics, const std::string& key, const std::string& value) {
+	for(auto& metric : metrics) {
+		if(metric.first == key) {
+			metric.second = value;
+			return;
+		}
+	}
+	metrics.emplace_back(key, value);
+}
+
 std::map<std::string, int> substractResources(std::map<std::string, int> resourcesAvailable, const std::map<std::string, int>& resourcesAllocated) {
 	for(const auto& resourceAllocated : resourcesAllocated) {
 		auto availableIter = resourcesAvailable.insert(std::make_pair(resourceAllocated.first, 0));
@@ -137,19 +147,6 @@ Procedure::Settings::Settings(const std::vector<std::pair<std::string, std::stri
 		if(setting.first.size() > 7 && setting.first.substr(0, 7) == "metric.") {
 			std::string key = setting.first.substr(7);
 			metrics.emplace_back(key, setting.second);
-		}
-
-		else if(setting.first == "maximum-tasks-running") {
-			if(maximumTasksRunning != std::string::npos) {
-	            throw esl::system::Stacktrace::add(std::runtime_error("Multiple definition of attribute '" + setting.first + "'."));
-			}
-
-			try {
-				maximumTasksRunning = esl::utility::String::toNumber<std::size_t>(setting.second);
-			}
-			catch(const std::exception& e) {
-	            throw esl::system::Stacktrace::add(std::runtime_error("Invalid value \"" + setting.second + "\" for attribute '" + setting.first + "'." + e.what()));
-			}
 		}
 
 		else if(setting.first == "idle-timeout") {
@@ -361,15 +358,48 @@ void Procedure::initializeContext(esl::object::Context& context) {
 	initializedSettings.reset(new InitializedSettings(context, settings));
 }
 
-std::vector<std::pair<std::string, std::string>> Procedure::getCurrentMetrics() const {
-	return settings.metrics;
+std::map<std::string, int> Procedure::getResourcesAvailable() const {
+	/* calculate allocated resources */
+	std::map<std::string, int> resourcesAvailable;
+	std::size_t tasksRunning = 0;
+
+	{
+		std::map<std::string, int> resourcesAllocated;
+		for(const auto& task : taskByTaskId) {
+			if(task.second->getStatus().state != common::types::State::running) {
+				continue;
+			}
+			++tasksRunning;
+			for(const auto& resourceAllocated : task.second->getResources()) {
+				resourcesAllocated[resourceAllocated.first] += resourceAllocated.second;
+			}
+		}
+		if(initializedSettings) {
+			resourcesAvailable = substractResources(initializedSettings->resourcesAvailable, resourcesAllocated);
+		}
+	}
+
+	resourcesAvailable.insert(std::make_pair("TASKS_RUNNING", tasksRunning));
+
+	return resourcesAvailable;
 }
 
-std::vector<std::pair<std::string, std::string>> Procedure::getCurrentMetrics(const service::schemas::RunConfiguration& runConfiguration) const {
-	std::vector<std::pair<std::string, std::string>> rv = getCurrentMetrics();
+std::vector<std::pair<std::string, std::string>> Procedure::getCurrentMetrics(const std::map<std::string, int>& resourcesAvailable, const service::schemas::RunConfiguration* runConfiguration) const {
+	/* put original metrics to the inital list of current metrics */
+	std::vector<std::pair<std::string, std::string>> rv = settings.metrics;
 
-	rv.push_back(std::make_pair("TASK_ID", runConfiguration.taskId));
-	rv.push_back(std::make_pair("EVENT_TYPE", runConfiguration.eventType));
+	/* add or replace available resources to the list of current metrics */
+	for(const auto& resourceAvailable : resourcesAvailable) {
+		addOrReplaceMetric(rv, resourceAvailable.first, std::to_string(resourceAvailable.second));
+	}
+
+	if(runConfiguration) {
+		addOrReplaceMetric(rv, "TASK_ID", runConfiguration->taskId);
+		addOrReplaceMetric(rv, "EVENT_TYPE", runConfiguration->eventType);
+		for(const auto& metric : runConfiguration->metrics) {
+			addOrReplaceMetric(rv, metric.key, metric.value);
+		}
+	}
 
 	return rv;
 }
@@ -385,6 +415,11 @@ void Procedure::signalTasks(const std::string& signal) {
 bool Procedure::runResilient() {
 	std::size_t firstConnectionFactory = nextConnectionFactory;
 	do {
+		/* It is intended to stop the application, if an exception occurs.
+		 * (maybe there is a DB error, serialization error or other std::runtime_error)
+		 *
+		 * Only network errors are caught and we will retry with another connection factory
+		 */
 		try {
 			return run();
 		}
@@ -392,19 +427,6 @@ bool Procedure::runResilient() {
 	        std::cerr << "NetworkError occurred: " << e.what() << "\n";
 			httpConnectionFactory = nullptr;
 		}
-		/* It is intended to stop the application, if an exception occurs.
-		 * (maybe there is a DB error, serialization error or other std::runtime_error)
-		 * But if there is an Network-Error, then we want to retry with another connection factory */
-#if 0
-	    catch(const std::exception& e) {
-	        std::cerr << "Exception occurred: " << e.what() << "\n";
-			httpConnectionFactory.reset();
-	    }
-	    catch(...) {
-	        std::cerr << "Unknown exception occurred.\n";
-			httpConnectionFactory.reset();
-	    }
-#endif
 	} while(firstConnectionFactory != nextConnectionFactory);
 
     logger.debug << "Sleep...\n";
@@ -424,11 +446,9 @@ bool Procedure::run() {
 	service::schemas::FetchRequest fetchRequest;
 
 	/* prepare task status list and count running threads */
-
-	/* calculate resources */
-	std::size_t tasksRunning = 0;
-	std::map<std::string, int> resourcesAllocated;
 	std::vector<std::string> notRunningTaskIDs;
+	std::size_t tasksRunning = 0;
+
 	for(const auto& task : taskByTaskId) {
 		service::schemas::TaskStatusWorker taskStatusWorker;
 
@@ -442,31 +462,22 @@ bool Procedure::run() {
 
 		if(taskStatus.state == common::types::State::running) {
 			++tasksRunning;
-			for(const auto& resourceAllocated : taskStatus.resourcesAllocated) {
-				resourcesAllocated[resourceAllocated.first] += resourceAllocated.second;
-			}
 		}
 		else {
 			notRunningTaskIDs.push_back(task.first);
 		}
 	}
-	std::map<std::string, int> resourcesAvailable = substractResources(initializedSettings->resourcesAvailable, resourcesAllocated);
 
 	fetchRequest.workerId = settings.workerId;
 
-	/* prepare list of metrics for transmission */
+	/* calculate allocated resources and get current metrics */
+	std::map<std::string, int> resourcesAvailable = getResourcesAvailable();
+	std::vector<std::pair<std::string, std::string>> metrics = getCurrentMetrics(resourcesAvailable, nullptr);
 
-	std::vector<std::pair<std::string, std::string>> metrics = getCurrentMetrics();
+	/* prepare list of metrics for transmission */
 	for(const auto& metric : metrics) {
-		auto iter = resourcesAvailable.find(metric.first);
-		if(iter == resourcesAvailable.end()) {
-			fetchRequest.metrics.push_back(service::schemas::Setting::make(metric.first, metric.second));
-		}
-		else {
-			fetchRequest.metrics.push_back(service::schemas::Setting::make(metric.first, std::to_string(iter->second)));
-		}
+		fetchRequest.metrics.push_back(service::schemas::Setting::make(metric.first, metric.second));
 	}
-	fetchRequest.metrics.push_back(service::schemas::Setting::make("TASKS_RUNNING", std::to_string(tasksRunning)));
 
 
 	/* prepare the list of available event types and if they are available to create a new task */
@@ -479,7 +490,7 @@ bool Procedure::run() {
 			service::schemas::EventTypeAvailable eventTypeAvailable;
 
 			eventTypeAvailable.eventType = taskFactory.first;
-			eventTypeAvailable.available = (settings.maximumTasksRunning == 0 || settings.maximumTasksRunning > tasksRunning) && !taskFactory.second.get().isBusy(resourcesAvailable);
+			eventTypeAvailable.available = !taskFactory.second.get().isBusy(resourcesAvailable);
 
 			fetchRequest.eventTypes.push_back(eventTypeAvailable);
 		}
@@ -526,7 +537,7 @@ bool Procedure::run() {
 
 		std::unique_ptr<plugin::Task> task;
 		try {
-			task = iter->second.get().createTask(notifyCV, notifyMutex, getCurrentMetrics(runConfiguration), runConfiguration);
+			task = iter->second.get().createTask(notifyCV, notifyMutex, getCurrentMetrics(resourcesAvailable, &runConfiguration), runConfiguration);
 		}
 		catch(const std::exception& e) {
 			logger.warn << "Could not create task " << runConfiguration.taskId << " for event type \"" << runConfiguration.eventType << "\" because exception occured with message \"" << e.what() << "\".\n";

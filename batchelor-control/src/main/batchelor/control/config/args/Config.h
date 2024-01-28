@@ -22,6 +22,8 @@
 #include <batchelor/control/Command.h>
 #include <batchelor/control/Procedure.h>
 
+#include <esl/object/Context.h>
+
 #include <string>
 #include <utility>
 #include <vector>
@@ -64,6 +66,7 @@ private:
 	void setNamespaceId(const char* namespaceId);
 	void setEventType(const char* eventType);
 	void setPriority(const char* priority);
+	void addMetric(const char* key, const char* value);
 	void addSetting(const char* key, const char* value);
 	void setCondition(const char* condition);
 	void setWait();

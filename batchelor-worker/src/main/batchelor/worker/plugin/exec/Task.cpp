@@ -45,7 +45,8 @@ Logger logger("batchelor::worker::plugin::exec::Task");
 }
 
 Task::Task(TaskFactory& aTaskFactoryExec, std::condition_variable& aNotifyCV, std::mutex& notifyMutex, const std::vector<std::pair<std::string, std::string>>& aMetrics, const TaskFactory::Settings& factorySettings, const service::schemas::RunConfiguration& runConfiguration)
-: taskFactory(aTaskFactoryExec),
+: plugin::Task(factorySettings.resourcesRequired),
+  taskFactory(aTaskFactoryExec),
   notifyCV(aNotifyCV),
   taskStatusMutex(notifyMutex)
 {
@@ -130,46 +131,29 @@ Task::Task(TaskFactory& aTaskFactoryExec, std::condition_variable& aNotifyCV, st
 			}
 		}
 	}
-
-
-	status.resourcesAllocated = factorySettings.resourcesRequired;
+	if(settings.cd.empty()) {
+		settings.cd = factorySettings.cd;
+	}
+	settings.cmd = factorySettings.cmd;
 
 	/* now we replace the parameters in the envs and args */
 	const std::map<std::string, std::string> metrics(aMetrics.begin(), aMetrics.end());
 
-#if 0
-	// ToDo: Does not work with quotes so far!
-	// std::vector<std::string> argsList = esl::utility::String::split(settings.args, ' ', true);
-	settings.args.clear();
-	for(const auto& arg : argsList) {
-		if(!settings.args.empty()) {
-			settings.args += " ";
-		}
-		settings.args += evaluate(arg, metrics);
-	}
-#else
 	settings.args = common::config::xml::Setting::generalEvaluate(settings.args, true, metrics);
-
-#endif
-
 	for(auto& env : settings.envs) {
 		env.second = common::config::xml::Setting::generalEvaluate(env.second, true, metrics);
 	}
-
+	settings.cd = common::config::xml::Setting::generalEvaluate(settings.cd, true, metrics);
+	settings.cmd = common::config::xml::Setting::generalEvaluate(settings.cmd, true, metrics);
 	std::string outfile = common::config::xml::Setting::generalEvaluate(factorySettings.outfile, true, metrics);
 	std::string errfile = common::config::xml::Setting::generalEvaluate(factorySettings.errfile, true, metrics);
 
 
-	if(settings.cd.empty()) {
-		settings.cd = factorySettings.cd;
-	}
+	/* check if all necessary properties are set */
 	if(settings.cd.empty()) {
 		throw std::runtime_error("No working directory defined to create a process.");
 	}
 
-	if(settings.cmd.empty()) {
-		settings.cmd = factorySettings.cmd;
-	}
 	if(settings.cmd.empty()) {
 		throw std::runtime_error("No executable defined to create a process.");
 	}
@@ -235,7 +219,6 @@ void Task::run() {
 			std::lock_guard<std::mutex> taskStatusLock(taskStatusMutex);
 			status.state = common::types::State::Type::done;
 			status.returnCode = returnCode;
-			taskFactory.releaseProcess();
 		}
 
 		logger.debug << "execution done, rc=" << returnCode << "\n";

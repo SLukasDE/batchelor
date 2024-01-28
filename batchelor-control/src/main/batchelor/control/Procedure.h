@@ -53,6 +53,7 @@ public:
 		std::unique_ptr<Command> command;
 		std::string eventType;
 		int priority = -1;
+		std::vector<std::pair<std::string, std::string>> metrics;
 		std::vector<std::pair<std::string, std::string>> settings;
 		std::string condition;
 		bool wait = false;

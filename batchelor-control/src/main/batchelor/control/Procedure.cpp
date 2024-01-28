@@ -47,11 +47,17 @@ void printStatus(const service::schemas::TaskStatusHead& taskStatus) {
 		break;
 	case common::types::State::running:
 		logger.info << "Running TS : \"" << taskStatus.tsRunning << "\"\n";
+		if(!taskStatus.message.empty()) {
+			logger.info << "Message    : \"" << taskStatus.message << "\"\n";
+		}
 		break;
 	case common::types::State::done:
 		logger.info << "Running TS : \"" << taskStatus.tsRunning << "\"\n";
 		logger.info << "Finished TS: \"" << taskStatus.tsFinished << "\"\n";
 		logger.info << "Return code: \"" << taskStatus.returnCode << "\"\n";
+		if(!taskStatus.message.empty()) {
+			logger.info << "Message    : \"" << taskStatus.message << "\"\n";
+		}
 		break;
 	case common::types::State::signaled:
 		logger.info << "Running TS : \"" << taskStatus.tsRunning << "\"\n";
@@ -146,6 +152,9 @@ void Procedure::sendEvent() {
 		for(const auto& setting : settings.settings) {
 			runRequest.settings.push_back(service::schemas::Setting::make(setting.first, setting.second));
 		}
+		for(const auto& metric : settings.metrics) {
+			runRequest.metrics.push_back(service::schemas::Setting::make(metric.first, metric.second));
+		}
 		runRequest.condition = settings.condition.empty() ? "${TRUE}" : settings.condition;
 
 		runResponse = client.runTask(settings.namespaceId, runRequest);
@@ -212,7 +221,7 @@ void Procedure::waitTask(const std::string& taskId) {
 			return;
 		}
 
-		if(oldTaskStatus.state == taskStatus->state) {
+		if(oldTaskStatus.state == taskStatus->state && oldTaskStatus.message == taskStatus->message) {
 			continue;
 		}
 
@@ -293,8 +302,8 @@ void Procedure::showTask(const service::schemas::TaskStatusHead& taskHead) const
 
 	}
 	logger.info << "Metrics    :\n";
-	for(std::size_t i = 0; i<taskHead.metrics.size(); ++i) {
-		logger.info << "  [" << (i+1) << "]: \"" << taskHead.metrics[i].key << "\" = \"" << taskHead.metrics[i].value << "\"\n";
+	for(std::size_t i = 0; i<taskHead.runConfiguration.metrics.size(); ++i) {
+		logger.info << "  [" << (i+1) << "]: \"" << taskHead.runConfiguration.metrics[i].key << "\" = \"" << taskHead.runConfiguration.metrics[i].value << "\"\n";
 	}
 	logger.info << "State      : \"" << taskHead.state << "\"\n";
 	logger.info << "Return code: \"" << taskHead.returnCode << "\"\n";

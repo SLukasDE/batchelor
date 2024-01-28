@@ -44,6 +44,8 @@ struct RunRequest {
 	 */
 	std::vector<Setting> settings;
 
+	std::vector<Setting> metrics;
+
 	/* First this task will go into a queue and it's state is waiting.
 	 * Every time a worker is calling fetchTask, this formula will be evaluated if task is still in state waiting and if worker is offering this eventType.
 	 * Available variables to get used in the formula are all variables delivered as metrics of "fetch-request" like
@@ -67,6 +69,7 @@ SERGUT_FUNCTION(RunRequest, data, ar) {
     ar & SERGUT_MMEMBER(data, eventType)
        & SERGUT_MMEMBER(data, priority)
        & SERGUT_NESTED_MMEMBER(data, settings, settings)
+       & SERGUT_NESTED_MMEMBER(data, metrics, metrics)
        & SERGUT_MMEMBER(data, condition);
 }
 

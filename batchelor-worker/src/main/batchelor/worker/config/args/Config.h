@@ -67,7 +67,6 @@ private:
 	void setSettingState(SettingsState settingState);
 
 	void setNamespaceId(const char* namespaceId);
-	void setMaximumTasksRunning(const char* maximumTasksRunning);
 	void setIdleTimeout(const char* maximumTasksRunning);
 	void setAvailableTimeout(const char* maximumTasksRunning);
 	void setWorkerId(const char* workerId);

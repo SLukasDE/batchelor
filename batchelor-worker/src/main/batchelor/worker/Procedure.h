@@ -57,7 +57,6 @@ public:
 		std::string workerId;
 
 		std::vector<std::pair<std::string, std::string>> metrics;
-		std::size_t maximumTasksRunning = std::string::npos;
 		std::chrono::milliseconds requestInterval{5000};
 		std::chrono::milliseconds idleTimeout{0};
 		std::chrono::milliseconds availableTimeout{0};
@@ -75,9 +74,6 @@ public:
 
 	void initializeContext(esl::object::Context& context) override;
 
-	std::vector<std::pair<std::string, std::string>> getCurrentMetrics() const;
-	std::vector<std::pair<std::string, std::string>> getCurrentMetrics(const service::schemas::RunConfiguration& runConfiguration) const;
-
 protected:
 	void internalProcedureRun(esl::object::Context& context) override;
 
@@ -89,6 +85,9 @@ private:
 		std::vector<std::pair<std::string, std::reference_wrapper<common::plugin::ConnectionFactory>>> connectionFactories;
 		std::map<std::string, int> resourcesAvailable;
 	};
+
+	std::map<std::string, int> getResourcesAvailable() const;
+	std::vector<std::pair<std::string, std::string>> getCurrentMetrics(const std::map<std::string, int>& resourcesAvailable, const service::schemas::RunConfiguration* runConfiguration) const;
 
 	void signalTasks(const std::string& signal);
 

@@ -48,7 +48,7 @@ struct TaskStatusHead {
 	 * - priority,
 	 * - ...
 	 */
-	std::vector<Setting> metrics;
+//	std::vector<Setting> metrics;
 
 	/* possible values:
 	 * - waiting   // set by head   // new task has been created and is waiting to get into state running
@@ -71,7 +71,7 @@ struct TaskStatusHead {
 
 SERGUT_FUNCTION(TaskStatusHead, data, ar) {
     ar & SERGUT_MMEMBER(data, runConfiguration)
-       & SERGUT_NESTED_MMEMBER(data, metrics, metric)
+//       & SERGUT_NESTED_MMEMBER(data, metrics, metric)
        & SERGUT_MMEMBER(data, state)
        & SERGUT_MMEMBER(data, returnCode)
        & SERGUT_MMEMBER(data, message)

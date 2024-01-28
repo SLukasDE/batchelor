@@ -1,7 +1,9 @@
 #include <batchelor/common/Plugin.h>
 #include <batchelor/common/plugin/basic/ConnectionFactory.h>
+#include <batchelor/common/plugin/basic/Socket.h>
 #include <batchelor/common/plugin/ConnectionFactory.h>
 #include <batchelor/common/plugin/oidc/ConnectionFactory.h>
+#include <batchelor/common/plugin/Socket.h>
 #include <batchelor/common/plugin/wrapper/ConnectionFactory.h>
 
 #include <esl/object/Object.h>
@@ -11,6 +13,9 @@ namespace common {
 
 void Plugin::install(esl::plugin::Registry& registry, const char* data) {
 	esl::plugin::Registry::set(registry);
+
+	registry.addPlugin("basic", plugin::basic::Socket::create);
+	registry.addPlugin<esl::object::Object, plugin::Socket, plugin::basic::Socket::create>("batchelor-socket-basic");
 
 	registry.addPlugin("basic", plugin::basic::ConnectionFactory::create);
 	registry.addPlugin<esl::object::Object, plugin::ConnectionFactory, plugin::basic::ConnectionFactory::create>("batchelor-connection-basic");

@@ -48,12 +48,9 @@ public:
 	enum class Flag {
 		override, extend, fixed
 	};
+
 	struct Settings {
 		std::map<std::string, int> resourcesRequired;
-		std::size_t maximumTasksRunning = 0;
-
-		//MetricsPolicy metricsPolicy = MetricsPolicy::allow;
-		//std::set<std::string> metrics;
 
 		std::string outfile;
 		std::string errfile;
@@ -69,7 +66,6 @@ public:
 		Flag cdFlag = Flag::fixed; // override|fixed
 
 		std::string cmd;
-//		Flag cmdFlag = Flag::fixed; // override|fixed
 	};
 
 	TaskFactory(Settings settings);
@@ -91,7 +87,6 @@ public:
 	 * - working dir,
 	 * - executable, ...
 	 * e.g.:
-	 * - settings[ 0] = { 'max-tasks-running' ; '3' }
 	 * - settings[ 1] = { 'args' ;              '--propertyId=Bla --propertyFile=/wxx/secret/property.cfg' }
 	 * - settings[ 2] = { 'args-flag' ;         'override|extend|fixed' }
 	 * - settings[ 3] = { 'env' ;               'DISPLAY=0' }
@@ -121,12 +116,8 @@ public:
 	 */
 	std::unique_ptr<plugin::Task> createTask(std::condition_variable& notifyCV, std::mutex& notifyMutex, const std::vector<std::pair<std::string, std::string>>& metrics, const service::schemas::RunConfiguration& runConfiguration) override;
 
-	void releaseProcess();
-
 private:
 	Settings settings;
-	std::size_t tasksRunning = 0;
-
 };
 
 } /* namespace exec */

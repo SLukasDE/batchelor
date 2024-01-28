@@ -1,11 +1,9 @@
-#include <batchelor/head/plugin/basic/Socket.h>
+#include <batchelor/common/plugin/basic/Socket.h>
 
 #include <esl/com/http/server/MHDSocket.h>
 
-#include <mhd4esl/com/http/server/Socket.h>
-
 namespace batchelor {
-namespace head {
+namespace common {
 namespace plugin {
 namespace basic {
 
@@ -14,7 +12,7 @@ std::unique_ptr<plugin::Socket> Socket::create(const std::vector<std::pair<std::
 }
 
 Socket::Socket(const std::vector<std::pair<std::string, std::string>>& settings)
-: socket(new mhd4esl::com::http::server::Socket(esl::com::http::server::MHDSocket::Settings(settings)))
+: socket(esl::com::http::server::MHDSocket::createNative(esl::com::http::server::MHDSocket::Settings(settings)))
 { }
 
 esl::com::http::server::Socket& Socket::get() {
@@ -23,5 +21,5 @@ esl::com::http::server::Socket& Socket::get() {
 
 } /* namespace basic */
 } /* namespace plugin */
-} /* namespace head */
+} /* namespace common */
 } /* namespace batchelor */

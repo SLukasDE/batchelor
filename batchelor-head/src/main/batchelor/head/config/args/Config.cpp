@@ -18,11 +18,9 @@
 
 #include <batchelor/head/config/args/Config.h>
 #include <batchelor/head/plugin/Observer.h>
-#include <batchelor/head/plugin/Socket.h>
 
 #include <batchelor/common/config/args/ArgumentsException.h>
-
-#include <sqlite4esl/database/ConnectionFactory.h>
+#include <batchelor/common/plugin/Socket.h>
 
 #include <esl/crypto/KeyStore.h>
 #include <esl/database/ConnectionFactory.h>
@@ -80,7 +78,7 @@ void Config::printUsage() {
 	std::cout << "  -S, --socket           <plugin>           Defines a socket to listen for requests.\n";
 	std::cout << "                                            Subsequent settings specified by \"--setting\" are specific to the plugin.\n";
 	std::cout << "\n";
-	std::cout << "                                            Most popular used plugin is \"http\" with following settings:\n";
+	std::cout << "                                            Most popular used plugin is \"basic\" with following settings:\n";
 	std::cout << "                                            * port:          <number>      Defines the port number to listen for HTTP requests.\n";
 	std::cout << "                                            * threads:       <number>      Defines the number of requests to handle parallel.\n";
 	std::cout << "                                            * https:         <true|false>  Defines if http or https is used.\n";
@@ -101,7 +99,7 @@ Config::Config(esl::object::Context& aContext, Procedure::Settings& aSettings, i
 			++i;
 		}
 		else if(currentArg == "-s"  || currentArg == "--setting") {
-			addSettings(i+1 < argc ? argv[i+1] : nullptr, i+2 < argc ? argv[i+2] : nullptr);
+			addSetting(i+1 < argc ? argv[i+1] : nullptr, i+2 < argc ? argv[i+2] : nullptr);
 			i = i+2;
 		}
 		else if(currentArg == "-c"  || currentArg == "--certificate") {
@@ -172,7 +170,7 @@ void Config::setSettingState(SettingsState aSettingState) {
 		++socketCount;
 		std::string id = "batchelor-head-socket-" + std::to_string(socketCount);
 
-		context.addObject(id, esl::plugin::Registry::get().create<plugin::Socket>(socket.implementation, socket.settings));
+		context.addObject(id, esl::plugin::Registry::get().create<common::plugin::Socket>(socket.implementation, socket.settings));
 		if(settings.socketIds.insert(id).second == false) {
 			throw ArgumentsException("Multiple specification of socket with <id> = \"" + id + "\".");
 		}
@@ -190,15 +188,15 @@ void Config::setSettingState(SettingsState aSettingState) {
 		database.reset(new Database());
 	}
 	else if(settingState == SettingsState::none && !database) {
-		context.addObject("batchelor-db", std::unique_ptr<esl::database::ConnectionFactory>(new sqlite4esl::database::ConnectionFactory(esl::database::SQLiteConnectionFactory::Settings({
+		context.addObject("batchelor-db", esl::database::SQLiteConnectionFactory::createNative(esl::database::SQLiteConnectionFactory::Settings({
 			//{{"URI"}, {":memory:"}}
 			{{"URI"}, {"file:test?mode=memory"}}
 			//{{"URI"}, {"file::memory:?mode=rw"}}
-		}))));
+		})));
 	}
 }
 
-void Config::addSettings(const char* key, const char* value) {
+void Config::addSetting(const char* key, const char* value) {
 	if(!key) {
 		throw ArgumentsException("Key missing of option \"--setting\".");
 	}

@@ -30,6 +30,7 @@
 #include <esl/com/http/server/RequestHandler.h>
 #include <esl/database/Connection.h>
 #include <esl/database/ConnectionFactory.h>
+#include <esl/io/Input.h>
 #include <esl/object/Context.h>
 #include <esl/object/InitializeContext.h>
 

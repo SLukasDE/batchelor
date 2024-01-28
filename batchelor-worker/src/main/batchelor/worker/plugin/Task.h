@@ -34,14 +34,18 @@ public:
 		common::types::State::Type state;
 		int returnCode;
 		std::string message; // e.g. exception message
-
-		std::map<std::string, int> resourcesAllocated;
 	};
 
+	Task(const std::map<std::string, int>& resources);
 	virtual ~Task() = default;
+
+	const std::map<std::string, int>& getResources() const noexcept;
 
 	virtual Status getStatus() const = 0;
 	virtual void sendSignal(const std::string& signal) = 0;
+
+private:
+	const std::map<std::string, int> resources;
 };
 
 } /* namespace plugin */

@@ -1,11 +1,11 @@
-#ifndef BATCHELOR_HEAD_PLUGIN_SOCKET_H_
-#define BATCHELOR_HEAD_PLUGIN_SOCKET_H_
+#ifndef BATCHELOR_COMMON_PLUGIN_SOCKET_H_
+#define BATCHELOR_COMMON_PLUGIN_SOCKET_H_
 
 #include <esl/com/http/server/Socket.h>
 #include <esl/object/Object.h>
 
 namespace batchelor {
-namespace head {
+namespace common {
 namespace plugin {
 
 class Socket : public virtual esl::object::Object {
@@ -14,7 +14,7 @@ public:
 };
 
 } /* namespace plugin */
-} /* namespace head */
+} /* namespace common */
 } /* namespace batchelor */
 
-#endif /* BATCHELOR_HEAD_PLUGIN_SOCKET_H_ */
+#endif /* BATCHELOR_COMMON_PLUGIN_SOCKET_H_ */

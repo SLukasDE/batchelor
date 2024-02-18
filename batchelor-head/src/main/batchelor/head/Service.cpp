@@ -39,8 +39,8 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <utility>
 
-#include <iostream>
 namespace batchelor {
 namespace head {
 namespace {
@@ -131,9 +131,9 @@ void addOrReplaceMetric(std::vector<service::schemas::Setting>& metrics, const s
 
 }
 
-Service::Service(const esl::object::Context& aContext, RequestHandler& aRequestHandler, std::mutex& mutex)
+Service::Service(const esl::object::Context& aContext, Engine& aEngine, std::mutex& mutex)
 : context(aContext),
-  requestHandler(aRequestHandler),
+  engine(aEngine),
   lockMutex(mutex)
 { }
 
@@ -181,7 +181,7 @@ service::schemas::FetchResponse Service::fetchTask(const std::string& namespaceI
 		}
 
 		getDao().updateTask(namespaceId, *existingTask);
-		requestHandler.onUpdateTask(*existingTask);
+		engine.onUpdateTask(*existingTask);
 	}
 
 	std::vector<Dao::Task> tasks;
@@ -231,7 +231,7 @@ service::schemas::FetchResponse Service::fetchTask(const std::string& namespaceI
 		task.metrics = metrics;
 
 		getDao().updateTask(namespaceId, task);
-		requestHandler.onUpdateTask(task);
+		engine.onUpdateTask(task);
 
 		service::schemas::RunConfiguration runConfiguration;
 
@@ -315,7 +315,7 @@ service::schemas::RunResponse Service::runTask(const std::string& namespaceId, c
 		//existingTask->metrics = runRequest.metrics;
 		existingTask->condition = runRequest.condition;
 		getDao().updateTask(namespaceId, *existingTask);
-		requestHandler.onUpdateTask(*existingTask);
+		engine.onUpdateTask(*existingTask);
 
 		rv = makeRunResponse(existingTask.get());
 	}
@@ -355,7 +355,7 @@ service::schemas::RunResponse Service::runTask(const std::string& namespaceId, c
 		task.state = batchelor::common::types::State::Type::queued;
 
 		getDao().saveTask(namespaceId, task);
-		requestHandler.onUpdateTask(task);
+		engine.onUpdateTask(task);
 
 		rv = makeRunResponse(&task);
 	}
@@ -391,13 +391,24 @@ void Service::sendSignal(const std::string& namespaceId, const std::string& task
 		}
 
 		getDao().updateTask(namespaceId, *task);
-		requestHandler.onUpdateTask(*task);
+		engine.onUpdateTask(*task);
 	}
+}
+
+std::vector<std::string> Service::getEventTypes(const std::string& namespaceId) {
+	logger.trace << "Service call: \"getEventTypes\"\n";
+
+	auto roles = getRoles(namespaceId);
+	if(roles.count(Procedure::Settings::Role::readOnly) == 0 && roles.count(Procedure::Settings::Role::execute) == 0) {
+		throw esl::com::http::server::exception::StatusCode(401);
+	}
+
+	return getDao().loadEventTypes(namespaceId);
 }
 
 esl::database::Connection& Service::getDBConnection() const {
 	if(!dbConnection) {
-		dbConnection = requestHandler.getDbConnectionFactory().createConnection();
+		dbConnection = engine.getDbConnectionFactory().createConnection();
 	}
 
 	if(!dbConnection) {
@@ -416,6 +427,42 @@ Dao& Service::getDao() const {
 }
 
 std::set<Procedure::Settings::Role> Service::getRoles(const std::string& namespaceId) {
+#if 1
+	std::set<Procedure::Settings::Role> roles;
+
+	auto authDataPtr = context.findObject<esl::object::Value<std::vector<std::pair<std::string, std::string>>>>("auth-data");
+	if(authDataPtr) {
+		const std::vector<std::pair<std::string, std::string>>& authData = authDataPtr->get();
+		for(const auto& keyValue : authData) {
+			if(keyValue.first != "batchelor") {
+				continue;
+			}
+			auto namespaceRole = esl::utility::String::split(keyValue.second, ':', false);
+			if(namespaceRole.size() != 2) {
+				throw std::runtime_error("Wrong auth-data format for key 'batchelor': \"" + keyValue.second + "\"");
+			}
+
+			if(namespaceRole[0].empty() == false && namespaceRole[0] != "*" && namespaceRole[0] != namespaceId) {
+				continue;
+			}
+
+			if(namespaceRole[1] == "execute") {
+				roles.insert(Procedure::Settings::Role::execute);
+			}
+			else if(namespaceRole[1] == "read-only") {
+				roles.insert(Procedure::Settings::Role::readOnly);
+			}
+			else if(namespaceRole[1] == "worker") {
+				roles.insert(Procedure::Settings::Role::worker);
+			}
+			else {
+				throw std::runtime_error("Wrong auth-data role for key 'batchelor': \"" + keyValue.second + "\"");
+			}
+		}
+	}
+
+	return roles;
+#else
 	auto rolesByNamespaceValuePtr = context.findObject<esl::object::Value<std::map<std::string, std::set<Procedure::Settings::Role>>>>("rolesByNamespaceValue");
 	if(!rolesByNamespaceValuePtr) {
 		return std::set<Procedure::Settings::Role>{Procedure::Settings::Role::execute, Procedure::Settings::Role::readOnly, Procedure::Settings::Role::worker};
@@ -427,6 +474,7 @@ std::set<Procedure::Settings::Role> Service::getRoles(const std::string& namespa
 	}
 
 	return std::set<Procedure::Settings::Role>();
+#endif
 }
 
 } /* namespace head */

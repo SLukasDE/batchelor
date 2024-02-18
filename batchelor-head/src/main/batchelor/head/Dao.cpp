@@ -565,7 +565,7 @@ std::vector<std::string> Dao::loadEventTypes(const std::string& namespaceId) {
     return results;
 }
 
-void Dao::cleanup(std::chrono::seconds timeoutZombie, std::chrono::seconds timeoutCleanup) {
+void Dao::cleanup(std::chrono::milliseconds timeoutZombie, std::chrono::milliseconds timeoutCleanup) {
     std::int64_t cleanupTS = std::chrono::time_point_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - timeoutCleanup).time_since_epoch().count();
 
 	/* **************** *
@@ -584,8 +584,12 @@ void Dao::cleanup(std::chrono::seconds timeoutZombie, std::chrono::seconds timeo
 	 * *************************************** */
 	static const std::string sqlUpdateStr = "UPDATE TASKS SET "
 			"STATE = ? "
-			"WHERE LAST_HEARTBEAT_TS <= ?;";
-	dbConnection.prepare(sqlUpdateStr).execute(common::types::State::toString(common::types::State::zombie), zombieTS);
+			"WHERE LAST_HEARTBEAT_TS <= ? AND (STATE = ? OR STATE = ?);";
+	dbConnection.prepare(sqlUpdateStr).execute(
+			common::types::State::toString(common::types::State::zombie),
+			zombieTS,
+			common::types::State::toString(common::types::State::queued),
+			common::types::State::toString(common::types::State::running));
 
 
 	/* ********************** *

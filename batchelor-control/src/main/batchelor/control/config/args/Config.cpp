@@ -42,6 +42,7 @@ static const std::string commandStrCancelTask = "cancel-task";
 static const std::string commandStrSignalTask = "signal-task";
 static const std::string commandStrShowTask = "show-task";
 static const std::string commandStrShowTasks = "show-tasks";
+static const std::string commandStrShowEventTypes = "show-event-types";
 
 const std::string& commandToStr(Command command) noexcept {
 	static const std::string commandStrUnknown = "(unknown)";
@@ -59,6 +60,8 @@ const std::string& commandToStr(Command command) noexcept {
 		return commandStrShowTask;
 	case Command::showTasks:
 		return commandStrShowTasks;
+	case Command::showEventTypes:
+		return commandStrShowEventTypes;
 	}
 	return commandStrUnknown;
 }
@@ -85,6 +88,9 @@ Command strToCommand(const std::string& commandStr) {
 	if(commandStr == commandStrShowTasks) {
 		return Command::showTasks;
 	}
+	if(commandStr == commandStrShowEventTypes) {
+		return Command::showEventTypes;
+	}
 	throw ArgumentsException("'" + commandStr + "' is no valid command.");
 }
 
@@ -99,21 +105,23 @@ void Config::printUsage() {
 	std::cout << "\n";
 	std::cout << "Usage:\n";
 	std::cout << "  batchelor-control help\n";
-	std::cout << "  batchelor-control send-event   [CONNECTION OPTIONS] --event-type <event-type> [--priority <priority>] [--setting <key> <value>] [--condition <condition>] [--wait | --wait-cancel <max-tries>]\n";
-	std::cout << "  batchelor-control wait-task    [CONNECTION OPTIONS] --task-id <task-id> [--wait-cancel <max-tries>]\n";
-	std::cout << "  batchelor-control cancel-task  [CONNECTION OPTIONS] --task-id <task-id>\n";
-	std::cout << "  batchelor-control signal-task  [CONNECTION OPTIONS] --task-id <task-id> --signal <signal>\n";
-	std::cout << "  batchelor-control show-task    [CONNECTION OPTIONS] --task-id <task-id>\n";
-	std::cout << "  batchelor-control show-tasks   [CONNECTION OPTIONS] [--state <state>] [--event-not-after <timestamp>] [--event-not-before <timestamp>]\n";
+	std::cout << "  batchelor-control send-event       [CONNECTION OPTIONS] --event-type <event-type> [--priority <priority>] [--setting <key> <value>] [--condition <condition>] [--wait | --wait-cancel <max-tries>]\n";
+	std::cout << "  batchelor-control wait-task        [CONNECTION OPTIONS] --task-id <task-id> [--wait-cancel <max-tries>]\n";
+	std::cout << "  batchelor-control cancel-task      [CONNECTION OPTIONS] --task-id <task-id>\n";
+	std::cout << "  batchelor-control signal-task      [CONNECTION OPTIONS] --task-id <task-id> --signal <signal>\n";
+	std::cout << "  batchelor-control show-task        [CONNECTION OPTIONS] --task-id <task-id>\n";
+	std::cout << "  batchelor-control show-tasks       [CONNECTION OPTIONS] [--state <state>] [--event-not-after <timestamp>] [--event-not-before <timestamp>]\n";
+	std::cout << "  batchelor-control show-event-types [CONNECTION OPTIONS]\n";
 	std::cout << "\n";
 	std::cout << "COMMANDS:\n";
-	std::cout << "  help         shows this help\n";
-	std::cout << "  send-event   adds a new event that will wait to get processed.\n";
-	std::cout << "  wait-task    Wait for new messages of the given task and return with exit code of this task.\n";
-	std::cout << "  cancel-task  This is equal to command 'signal-task' with option '--signal CANCEL'.\n";
-	std::cout << "  signal-task  Send a signal to the given task. It must be exactly one signal specified as name or number.\n";
-	std::cout << "  show-task    Shows all details of the given task.\n";
-	std::cout << "  show-tasks   Shows a list with some attributes of tasks that matches the given criteria.\n";
+	std::cout << "  help              shows this help\n";
+	std::cout << "  send-event        adds a new event that will wait to get processed.\n";
+	std::cout << "  wait-task         Wait for new messages of the given task and return with exit code of this task.\n";
+	std::cout << "  cancel-task       This is equal to command 'signal-task' with option '--signal CANCEL'.\n";
+	std::cout << "  signal-task       Send a signal to the given task. It must be exactly one signal specified as name or number.\n";
+	std::cout << "  show-task         Shows all details of the given task.\n";
+	std::cout << "  show-tasks        Shows a list with some attributes of tasks that matches the given criteria.\n";
+	std::cout << "  show-event-types  Shows a list of available event types.\n";
 	std::cout << "\n";
 	std::cout << "General OPTIONS:\n";
 	std::cout << "  -N, --namespace        <namespace-id>   Specifies the used namespace for all commands.\n";
@@ -161,6 +169,7 @@ void Config::printUsage() {
 	std::cout << "\n";
 	std::cout << "                                          Most popular used plugin is \"basic\" with following settings:\n";
 	std::cout << "                                          * url:           <server-url>  Defines the URL to the head server.\n";
+	std::cout << "                                          * api-key:       <api-key>     If this setting is specified, a bearer token will be used as authorization.\n";
 	std::cout << "                                          * username:      <username>    If this setting is specified, basic-auth will be used.\n";
 	std::cout << "                                          * password:      <password>    If this setting is specified, basic-auth will be used.\n";
 	/*
@@ -332,6 +341,17 @@ void Config::setCommand(const std::string& commandStr) {
 			throw argumentsExceptionCommandOptionMismatch(commandStr, "--event-not-before");
 		}
 		break;
+	case Command::showEventTypes:
+		if(!settings.state.empty()) {
+			throw argumentsExceptionCommandOptionMismatch(commandStr, "--state");
+		}
+		if(!settings.eventNotAfter.empty()) {
+			throw argumentsExceptionCommandOptionMismatch(commandStr, "--event-not-after");
+		}
+		if(!settings.eventNotBefore.empty()) {
+			throw argumentsExceptionCommandOptionMismatch(commandStr, "--event-not-before");
+		}
+		// @suppress("No break at end of case")
 	case Command::showTasks:
 		if(!settings.taskId.empty()) {
 			throw argumentsExceptionCommandOptionMismatch(commandStr, "--task-id");

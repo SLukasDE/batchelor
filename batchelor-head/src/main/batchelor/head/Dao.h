@@ -75,7 +75,7 @@ public:
 	// load all event types, delete outdated event types and return remaining event types
 	std::vector<std::string> loadEventTypes(const std::string& namespaceId);
 
-	void cleanup(std::chrono::seconds timeoutZombie, std::chrono::seconds timeoutCleanup);
+	void cleanup(std::chrono::milliseconds timeoutZombie, std::chrono::milliseconds timeoutCleanup);
 
 private:
 

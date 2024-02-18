@@ -29,7 +29,8 @@ enum class Command {
 	cancelTask,
 	signalTask,
 	showTask,
-	showTasks
+	showTasks,
+	showEventTypes
 };
 
 } /* namespace control */

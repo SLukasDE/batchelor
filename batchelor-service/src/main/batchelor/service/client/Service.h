@@ -58,6 +58,8 @@ public:
 	// used by controller-cli
 	void sendSignal(const std::string& namespaceId, const std::string& taskId, const std::string& signal) override;
 
+	std::vector<std::string> getEventTypes(const std::string& namespaceId) override;
+
 private:
     const esl::com::http::client::Connection& connection;
 };

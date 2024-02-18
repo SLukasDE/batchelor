@@ -112,8 +112,18 @@ public:
 		}
 	}
 
-	// POST: "/fetchTask/{namespaceId}"
+	// GET: "/alive"
 	void process_1() {
+		service->alive();
+
+		esl::utility::MIME responseMIME = esl::utility::MIME::Type::applicationJson;
+		esl::com::http::server::Response response(200, responseMIME);
+		esl::io::Output output = esl::io::output::Memory::create(emptyResponse.data(), emptyResponse.size());
+		requestContext.getConnection().send(response, std::move(output));
+	}
+
+	// POST: "/fetch-task/{namespaceId}"
+	void process_2() {
 		const std::string& namespaceId = pathList[1];
 		schemas::FetchRequest fetchRequest = sergut::JsonDeserializer(getString()).deserializeData<schemas::FetchRequest>();
 		schemas::FetchResponse fetchResponse = service->fetchTask(namespaceId, fetchRequest);
@@ -123,7 +133,6 @@ public:
 
 		if(responseMIME == esl::utility::MIME::Type::applicationXml) {
 			sergut::XmlSerializer ser;
-			//ser.serializeNestedData("nodes", "node", sergut::XmlValueType::Child, fetchResponse);
 			ser.serializeData("fetchResponse", fetchResponse);
 		    responseContent = ser.str();
 		}
@@ -142,7 +151,7 @@ public:
 	}
 
 	// GET: "/tasks/{namespaceId}[?[state={state}][&][nafter={eventNotAfter}][&][nbefore={eventNotBefore}]]"
-	void process_2() {
+	void process_3() {
 		const std::string& namespaceId = pathList[1];
 		std::string state;
 		if(requestContext.getRequest().hasArgument("state")) {
@@ -184,7 +193,7 @@ public:
 	}
 
 	// GET: "/task/{namespaceId}/{taskId}"
-	void process_3() {
+	void process_4() {
 		const std::string& namespaceId = pathList[1];
 		const std::string& taskId = pathList[2];
 		std::unique_ptr<schemas::TaskStatusHead> status = service->getTask(namespaceId, taskId);
@@ -216,7 +225,7 @@ public:
 	}
 
 	// POST: "/task/{namespaceId}"
-	void process_4() {
+	void process_5() {
 		const std::string& namespaceId = pathList[1];
 		schemas::RunRequest runRequest = sergut::JsonDeserializer(getString()).deserializeData<schemas::RunRequest>();
 		schemas::RunResponse runResponse = service->runTask(namespaceId, runRequest);
@@ -245,7 +254,7 @@ public:
 	}
 
 	// POST: "/signal/{namespaceId}/{taskId}/{signal}"
-	void process_5() {
+	void process_6() {
 		const std::string& namespaceId = pathList[1];
 		const std::string& taskId = pathList[2];
 		const std::string& signal = pathList[3];
@@ -258,13 +267,31 @@ public:
 		requestContext.getConnection().send(response, std::move(output));
 	}
 
-	// GET: "/alive"
-	void process_6() {
-		service->alive();
+	// GET: "/event-types/{namespaceId}"
+	void process_7() {
+		const std::string& namespaceId = pathList[1];
 
-		esl::utility::MIME responseMIME = esl::utility::MIME::Type::applicationJson;
+		std::vector<std::string> eventTypes = service->getEventTypes(namespaceId);
+
+		std::string responseContent;
+		esl::utility::MIME responseMIME = getResponseMIME();
+
+		if(responseMIME == esl::utility::MIME::Type::applicationXml) {
+			sergut::XmlSerializer ser;
+			ser.serializeNestedData("event-types", "event-type", sergut::XmlValueType::Child, eventTypes);
+		    responseContent = ser.str();
+		}
+		else if(responseMIME == esl::utility::MIME::Type::applicationJson) {
+			sergut::JsonSerializer ser;
+			ser.serializeData(eventTypes);
+		    responseContent = ser.str();
+		}
+		else {
+			throw esl::com::http::server::exception::StatusCode(415, "accept header requires \"application/xml\" or \"application/json\"");
+		}
+
 		esl::com::http::server::Response response(200, responseMIME);
-		esl::io::Output output = esl::io::output::Memory::create(emptyResponse.data(), emptyResponse.size());
+		esl::io::Output output = esl::io::output::String::create(std::move(responseContent));
 		requestContext.getConnection().send(response, std::move(output));
 	}
 
@@ -313,44 +340,53 @@ esl::io::Input RequestHandler::accept(esl::com::http::server::RequestContext& re
 
 	esl::object::Context& objectContext = requestContext.getObjectContext();
 
-	// POST: "/fetchTask/{namespaceId}"
-	if(pathList.size() == 2 && pathList[0] == "fetchTask"
-	&& requestContext.getRequest().getMethod() == esl::utility::HttpMethod::toString(esl::utility::HttpMethod::Type::httpPost)) {
+	// GET: "/alive"
+	if(pathList.size() == 1 && pathList[0] == "alive"
+	&& requestContext.getRequest().getMethod() == esl::utility::HttpMethod::toString(esl::utility::HttpMethod::Type::httpGet)) {
 		writer.reset(new InputHandler(requestContext, &InputHandler::process_1, makeService(objectContext), std::move(pathList)));
+	}
+	// POST: "/fetch-task/{namespaceId}"
+	else if(pathList.size() == 2 && pathList[0] == "fetch-task"
+	&& requestContext.getRequest().getMethod() == esl::utility::HttpMethod::toString(esl::utility::HttpMethod::Type::httpPost)) {
+		writer.reset(new InputHandler(requestContext, &InputHandler::process_2, makeService(objectContext), std::move(pathList)));
 	}
 	// GET: "/tasks/{namespaceId}[?state={state}]"
 	else if(pathList.size() == 2 && pathList[0] == "tasks"
 	&& requestContext.getRequest().getMethod() == esl::utility::HttpMethod::toString(esl::utility::HttpMethod::Type::httpGet)) {
-		writer.reset(new InputHandler(requestContext, &InputHandler::process_2, makeService(objectContext), std::move(pathList)));
+		writer.reset(new InputHandler(requestContext, &InputHandler::process_3, makeService(objectContext), std::move(pathList)));
 	}
 	// GET: "/task/{namespaceId}/{taskId}"
 	else if(pathList.size() == 3 && pathList[0] == "task"
 	&& requestContext.getRequest().getMethod() == esl::utility::HttpMethod::toString(esl::utility::HttpMethod::Type::httpGet)) {
-		writer.reset(new InputHandler(requestContext, &InputHandler::process_3, makeService(objectContext), std::move(pathList)));
+		writer.reset(new InputHandler(requestContext, &InputHandler::process_4, makeService(objectContext), std::move(pathList)));
 	}
 	// POST: "/task/{namespaceId}"
 	else if(pathList.size() == 2 && pathList[0] == "task"
 	&& requestContext.getRequest().getMethod() == esl::utility::HttpMethod::toString(esl::utility::HttpMethod::Type::httpPost)) {
-		writer.reset(new InputHandler(requestContext, &InputHandler::process_4, makeService(objectContext), std::move(pathList)));
+		writer.reset(new InputHandler(requestContext, &InputHandler::process_5, makeService(objectContext), std::move(pathList)));
 	}
 	// POST: "/signal/{namespaceId}/{taskId}/{signal}"
 	else if(pathList.size() == 4 && pathList[0] == "signal"
 	&& requestContext.getRequest().getMethod() == esl::utility::HttpMethod::toString(esl::utility::HttpMethod::Type::httpPost)) {
-		writer.reset(new InputHandler(requestContext, &InputHandler::process_5, makeService(objectContext), std::move(pathList)));
-	}
-	// GET: "/alive"
-	else if(pathList.size() == 1 && pathList[0] == "alive"
-	&& requestContext.getRequest().getMethod() == esl::utility::HttpMethod::toString(esl::utility::HttpMethod::Type::httpGet)) {
 		writer.reset(new InputHandler(requestContext, &InputHandler::process_6, makeService(objectContext), std::move(pathList)));
+	}
+	// GET: "/event-types/{namespaceId}"
+	else if(pathList.size() == 2 && pathList[0] == "event-types"
+	&& requestContext.getRequest().getMethod() == esl::utility::HttpMethod::toString(esl::utility::HttpMethod::Type::httpGet)) {
+		writer.reset(new InputHandler(requestContext, &InputHandler::process_7, makeService(objectContext), std::move(pathList)));
 	}
 
 	if(writer == nullptr) {
+#if 1
+		return esl::io::Input();
+#else
 		// Invalid request
 		logger.error << "Invalid request:\n";
 		logger.error << "- getPath():        \"" << requestContext.getPath() << "\"\n";
 		logger.error << "- getMethod():      \"" << requestContext.getRequest().getMethod().toString() << "\"\n";
 		logger.error << "- getContentType(): \"" << requestContext.getRequest().getContentType().toString() << "\"\n";
         throw esl::com::http::server::exception::StatusCode(405, esl::utility::MIME::Type::applicationJson, "{}");
+#endif
 	}
 
 	return esl::io::Input(std::move(writer));

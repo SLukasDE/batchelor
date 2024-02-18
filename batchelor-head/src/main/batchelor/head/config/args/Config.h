@@ -68,15 +68,12 @@ private:
 		none, database, observer, socket
 	} settingState = SettingsState::none;
 
-	std::map<std::string, std::set<std::pair<std::string, Procedure::Settings::Role>>> namespacesRolesByGroup;
-	std::map<std::string, std::set<std::string>> groupsByUser;
-
 	void setSettingState(SettingsState settingState);
 
 	void addSetting(const char* key, const char* value);
 	void addCertificate(const char* hostName, const char* keyFile, const char* certFile);
-	void addGroup(const char* group, const char* namespaceId, const char* role);
-	void addUser(const char* user, const char* group);
+	void addApiKey(const char* apik, const char* namespaceId, const char* role);
+	void addUser(const char* user, const char* namespaceId, const char* role);
 	void addBasicAuth(const char* user, const char* password);
 	void addDatabase(const char* implementation);
 	void addObserver(const char* implementation);

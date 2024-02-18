@@ -88,6 +88,7 @@ private:
 	void signalTask(const std::string& taskId, const std::string& signal);
 	void showTask();
 	void showTasks();
+	void showEventTypes();
 
 	std::unique_ptr<esl::com::http::client::Connection> createHTTPConnection() const;
 	void showTask(const service::schemas::TaskStatusHead& taskStatus) const noexcept;

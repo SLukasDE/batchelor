@@ -20,8 +20,8 @@
 #define BATCHELOR_HEAD_PROCEDURE_H_
 
 #include <batchelor/common/Procedure.h>
-
 #include <batchelor/common/plugin/Socket.h>
+
 #include <batchelor/head/plugin/Observer.h>
 
 #include <esl/com/http/server/RequestHandler.h>
@@ -45,7 +45,6 @@ class Procedure : public common::Procedure {
 public:
 	struct Settings {
 		Settings() = default;
-		//Settings(const std::vector<std::pair<std::string, std::string>>& settings);
 
 		enum class Role {
 			readOnly,
@@ -60,6 +59,13 @@ public:
 		};
 
 		std::map<std::string, UserData> users;
+
+		struct APIKeyData {
+			std::string apiKey;
+			std::map<std::string, std::set<Role>> rolesByNamespace;
+		};
+
+		std::map<std::string, APIKeyData> apiKeys;
 
 		std::map<std::string, std::pair<std::string, std::string>> certFilesByHostname;
 

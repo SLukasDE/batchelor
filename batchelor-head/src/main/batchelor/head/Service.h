@@ -20,8 +20,8 @@
 #define BATCHELOR_HEAD_SERVICE_H_
 
 #include <batchelor/head/Dao.h>
+#include <batchelor/head/Engine.h>
 #include <batchelor/head/Procedure.h>
-#include <batchelor/head/RequestHandler.h>
 
 #include <batchelor/service/Service.h>
 #include <batchelor/service/schemas/FetchResponse.h>
@@ -45,7 +45,7 @@ namespace head {
 
 class Service : public service::Service {
 public:
-	Service(const esl::object::Context& context, RequestHandler& requestHandler, std::mutex& mutex);
+	Service(const esl::object::Context& context, Engine& engine, std::mutex& mutex);
 
 	void alive() override;
 
@@ -58,6 +58,7 @@ public:
 	std::unique_ptr<service::schemas::TaskStatusHead> getTask(const std::string& namespaceId, const std::string& taskId) override;
 	service::schemas::RunResponse runTask(const std::string& namespaceId, const service::schemas::RunRequest& runRequest) override;
 	void sendSignal(const std::string& namespaceId, const std::string& taskId, const std::string& signal) override;
+	std::vector<std::string> getEventTypes(const std::string& namespaceId) override;
 
 private:
 	esl::database::Connection& getDBConnection() const;
@@ -65,7 +66,7 @@ private:
 	std::set<Procedure::Settings::Role> getRoles(const std::string& namespaceId);
 
 	const esl::object::Context& context;
-	RequestHandler& requestHandler;
+	Engine& engine;
 	std::lock_guard<std::mutex> lockMutex;
 	mutable std::unique_ptr<esl::database::Connection> dbConnection;
 	mutable std::unique_ptr<Dao> dao;

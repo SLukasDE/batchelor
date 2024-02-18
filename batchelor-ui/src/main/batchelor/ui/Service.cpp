@@ -39,5 +39,10 @@ void Service::sendSignal(const std::string& namespaceId, const std::string& task
 	return service::client::Service(*httpConnection).sendSignal(namespaceId, taskId, signal);
 }
 
+std::vector<std::string> Service::getEventTypes(const std::string& namespaceId) {
+	auto httpConnection = requestHandler.createHTTPConnection();
+	return service::client::Service(*httpConnection).getEventTypes(namespaceId);
+}
+
 } /* namespace ui */
 } /* namespace batchelor */

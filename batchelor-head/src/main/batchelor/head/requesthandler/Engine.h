@@ -16,17 +16,17 @@
  * License along with Batchelor.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef BATCHELOR_HEAD_REQUESTHANDLER_H_
-#define BATCHELOR_HEAD_REQUESTHANDLER_H_
-
-#include <batchelor/service/server/RequestHandler.h>
+#ifndef BATCHELOR_HEAD_REQUESTHANDLER_ENGINE_H_
+#define BATCHELOR_HEAD_REQUESTHANDLER_ENGINE_H_
 
 #include <batchelor/head/Dao.h>
+#include <batchelor/head/Engine.h>
 #include <batchelor/head/plugin/Observer.h>
 #include <batchelor/head/Procedure.h>
 
+#include <batchelor/service/server/RequestHandler.h>
+
 #include <esl/com/http/server/Request.h>
-#include <esl/com/http/server/RequestContext.h>
 #include <esl/com/http/server/RequestHandler.h>
 #include <esl/database/Connection.h>
 #include <esl/database/ConnectionFactory.h>
@@ -46,45 +46,42 @@
 #include <utility>
 #include <vector>
 
+
 namespace batchelor {
 namespace head {
+namespace requesthandler {
 
-class RequestHandler : public service::server::RequestHandler, public esl::object::InitializeContext {
+class Engine : public head::Engine, public service::server::RequestHandler, public esl::object::InitializeContext {
 public:
 	struct Settings {
-		Settings(const std::vector<std::pair<std::string, std::string>>& settings);
-		Settings(const Procedure::Settings& settings);
-
-		std::map<std::string, Procedure::Settings::UserData> users;
+		explicit Settings(const std::vector<std::pair<std::string, std::string>>& settings);
+		explicit Settings(const Procedure::Settings& settings);
 
 		// after how many seconds do we handle a task or worker as zombie?
-		std::chrono::seconds timeoutZombie = std::chrono::minutes(5);
+		std::chrono::milliseconds timeoutZombie{0};
 
 		// after how many seconds can we delete old stuff?
-		std::chrono::seconds timeoutCleanup = std::chrono::hours(1);
+		std::chrono::milliseconds timeoutCleanup{0};
 
 		std::string dbConnectionFactoryId;
 		std::set<std::string> pluginIds;
 	};
 
-	RequestHandler(const Settings& settings);
-	~RequestHandler();
+	Engine(const Settings& settings);
+	~Engine();
 
 	static std::unique_ptr<esl::com::http::server::RequestHandler> create(const std::vector<std::pair<std::string, std::string>>& settings);
 
 	void initializeContext(esl::object::Context& context) override;
 
-	esl::io::Input accept(esl::com::http::server::RequestContext& requestContext) const override;
-
-	esl::database::ConnectionFactory& getDbConnectionFactory() const noexcept;
-	void onUpdateTask(const Dao::Task& task);
+	esl::database::ConnectionFactory& getDbConnectionFactory() const noexcept override;
+	void onUpdateTask(const Dao::Task& task) override;
 
 private:
 	struct InitializedSettings {
 		InitializedSettings(esl::object::Context& context, const Settings& settings);
 
 		esl::database::ConnectionFactory& dbConnectionFactory;
-		//std::unique_ptr<esl::database::Connection> dbConnection;
 		std::vector<std::reference_wrapper<plugin::Observer>> plugins;
 	};
 
@@ -96,13 +93,13 @@ private:
 	bool threadStopping = false;
 	std::thread thread;
 
-	void addRolesByNamespaceValue(esl::com::http::server::RequestContext& requestContext) const;
 	void threadRun();
 	void threadStop();
 	void cleanup();
 };
 
+} /* namespace requesthandler */
 } /* namespace head */
 } /* namespace batchelor */
 
-#endif /* BATCHELOR_HEAD_REQUESTHANDLER_H_ */
+#endif /* BATCHELOR_HEAD_REQUESTHANDLER_ENGINE_H_ */

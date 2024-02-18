@@ -61,7 +61,7 @@ void Service::alive() {
 schemas::FetchResponse Service::fetchTask(const std::string& namespaceId, const schemas::FetchRequest& fetchRequest) {
 	schemas::FetchResponse fetchResponse;
 
-	static const std::string serviceUrl = "fetchTask/" + namespaceId;
+	static const std::string serviceUrl = "fetch-task/" + namespaceId;
     esl::com::http::client::Request request(serviceUrl, esl::utility::HttpMethod::Type::httpPost, esl::utility::MIME::Type::applicationJson);
     request.addHeader("Accept", esl::utility::MIME::toString(esl::utility::MIME::Type::applicationJson) + "," + esl::utility::MIME::toString(esl::utility::MIME::Type::applicationXml));
 
@@ -257,6 +257,44 @@ void Service::sendSignal(const std::string& namespaceId, const std::string& task
         std::string message = "Received wrong status code  \"" + std::to_string(response.getStatusCode()) + "\" from service \"" + serviceUrl + "\"";
 		throw esl::system::Stacktrace::add(std::runtime_error(message));
     }
+}
+
+std::vector<std::string> Service::getEventTypes(const std::string& namespaceId) {
+	std::vector<std::string> eventTypes;
+
+	std::string serviceUrl = "event-types/" + namespaceId;
+
+    esl::com::http::client::Request request(serviceUrl, esl::utility::HttpMethod::Type::httpGet, esl::utility::MIME::Type::applicationJson);
+    request.addHeader("Accept", esl::utility::MIME::toString(esl::utility::MIME::Type::applicationJson) + "," + esl::utility::MIME::toString(esl::utility::MIME::Type::applicationXml));
+
+	esl::io::input::String inputWriterString;
+	esl::io::Writer& inputWriter(inputWriterString);
+	esl::io::Input input(inputWriter);
+
+	esl::com::http::client::Response response = connection.send(std::move(request), esl::io::Output(), std::move(input));
+
+    if(response.getStatusCode() == 200) {
+        if(response.getContentType() == esl::utility::MIME::Type::applicationJson) {
+        	if(!inputWriterString.getString().empty()) {
+                sergut::JsonDeserializer deSerializer(inputWriterString.getString());
+                eventTypes = deSerializer.deserializeData<std::vector<std::string>>();
+        	}
+        }
+        else if(response.getContentType() == esl::utility::MIME::Type::applicationXml) {
+        	if(!inputWriterString.getString().empty()) {
+                sergut::XmlDeserializer deSerializer(inputWriterString.getString());
+                eventTypes = deSerializer.deserializeNestedData<std::vector<std::string>>("event-types", "event-type");
+        	}
+        }
+        else {
+        	throw esl::system::Stacktrace::add(std::runtime_error("Received not supported response content type \"" + response.getContentType().toString() + "\""));
+        }
+    }
+    else {
+    	throw esl::system::Stacktrace::add(std::runtime_error("Received not supported status code \"" + std::to_string(response.getStatusCode()) + "\""));
+    }
+
+    return eventTypes;
 }
 
 } /* namespace client */

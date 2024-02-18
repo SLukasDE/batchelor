@@ -41,7 +41,6 @@ protected:
 	RequestHandler(std::function<std::unique_ptr<Service>(const esl::object::Context&)> createService);
 
 private:
-    //const ServiceFactory& serviceFactory;
     std::function<std::unique_ptr<Service>(const esl::object::Context&)> createService;
 
     std::unique_ptr<Service> makeService(esl::object::Context& context) const;

@@ -130,6 +130,9 @@ void Procedure::internalProcedureRun(esl::object::Context& context) {
 			case Command::showTasks:
 				showTasks();
 				break;
+			case Command::showEventTypes:
+				showEventTypes();
+				break;
 			}
 			break;
 		}
@@ -268,6 +271,23 @@ void Procedure::showTasks() {
 		showTask(taskHeads[i]);
 	}
 }
+
+void Procedure::showEventTypes() {
+	auto httpConnection = createHTTPConnection();
+	service::client::Service client(*httpConnection);
+
+	std::vector<std::string> eventTypes = client.getEventTypes(settings.namespaceId);
+	if(eventTypes.size() == 1) {
+		logger.info << "1 entry:\n";
+	}
+	else {
+		logger.info << eventTypes.size() << " entries:\n";
+	}
+	for(std::size_t i = 0; i < eventTypes.size(); ++i) {
+		logger.info << "#" << (i+1) << ": \"" << eventTypes[i] << "\"\n";
+	}
+}
+
 
 std::unique_ptr<esl::com::http::client::Connection> Procedure::createHTTPConnection() const {
 	if(!httpConnectionFactory && initializedSettings && nextConnectionFactory < initializedSettings->connectionFactories.size()) {

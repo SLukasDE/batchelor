@@ -77,6 +77,9 @@ public:
 
 	/* This call is used by a controller-cli or a web frontend to send a specific signal to a task or to cancel the task */
 	virtual void sendSignal(const std::string& namespaceId, const std::string& taskId, const std::string& signal) = 0;
+
+	/* This call is used by a controller-cli or a web frontend to get a list of available event types */
+	virtual std::vector<std::string> getEventTypes(const std::string& namespaceId) = 0;
 };
 
 } /* namespace service */

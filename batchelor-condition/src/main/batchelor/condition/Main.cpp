@@ -14,10 +14,21 @@ namespace {
 class TestScanner : public Scanner
 {
 public:
-	TestScanner();
+	TestScanner()
+	: Scanner(fooStream)
+	{ }
 
-	//int fetchNextToken(Compiler& compiler) override;
-	int fetchNextToken(void* const semanticType, void* location, Compiler& compiler) override;
+	int fetchNextToken(void* const semanticType, void* location, Compiler& compiler) override {
+		switch(state++) {
+		case 0:
+			return 1;
+		case 1:
+			return 1;
+		default:
+			break;
+		}
+		return 0;
+	}
 
 	int state = 0;
 	static std::stringstream fooStream;
@@ -25,22 +36,6 @@ public:
 
 std::stringstream TestScanner::fooStream;
 
-TestScanner::TestScanner()
-: Scanner(fooStream)
-{ }
-
-int TestScanner::fetchNextToken(void* const semanticType, void* location, Compiler& compiler) {
-//int TestScanner::fetchNextToken(void* const semanticType, void* location, Compiler& compiler) {
-	switch(state++) {
-	case 0:
-		return 1;
-	case 1:
-		return 1;
-	default:
-		break;
-	}
-	return 0;
-}
 
 } /* anonymous namespace */
 

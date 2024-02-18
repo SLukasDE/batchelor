@@ -19,7 +19,8 @@
 #include <batchelor/common/Plugin.h>
 
 #include <batchelor/head/Plugin.h>
-#include <batchelor/head/RequestHandler.h>
+#include <batchelor/head/requesthandler/Auth.h>
+#include <batchelor/head/requesthandler/Engine.h>
 
 namespace batchelor {
 namespace head {
@@ -29,7 +30,8 @@ void Plugin::install(esl::plugin::Registry& registry, const char* data) {
 
 	common::Plugin::install(esl::plugin::Registry::get(), nullptr);
 
-	registry.addPlugin("batchelor-head", RequestHandler::create);
+	registry.addPlugin("batchelor-auth", requesthandler::Auth::create);
+	registry.addPlugin("batchelor-head", requesthandler::Engine::create);
 }
 
 } /* namespace head */

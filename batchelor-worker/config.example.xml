@@ -4,26 +4,23 @@
     
     <connection type="basic">
         <setting key="url" value="http://localhost:8080"/>
+        <setting key="api-key" value="AXBS5"/>
     </connection>
     
-    <connection type="oidc">
+    <!--connection type="oidc">
         <setting key="url" value="https://127.0.0.1:8080"/>
         <setting key="identity-provider" value="https://127.0.0.1:8080"/>
         <setting key="client-id" value="heinz"/>
         <setting key="client-secret" value="gaul"/>
-    </connection>
+    </connection-->
     
-    <setting key="maximum-tasks-running" value="3"/>
-    
-    <!--user-defined-metric key="OS" value="zLinux"/>
-    <user-defined-metric key="CLOUD_ID" value="REWE-OnPrem|REWE-GCP"/-->
+    <metric key="OS" value="zLinux"/>
+    <metric key="CLOUD_ID" value="REWE-OnPrem|REWE-GCP"/>
+    <metric key="TASKS" value="3"/>
     
     <event id="batch-1" type="exec">
-        <setting key="metrics-policy" value="allow"/>
-        <setting key="metric" value="TASK_ID"/>
-        <setting key="metric" value="CLOUD_ID"/>
-        
-        <setting key="maximum-tasks-running" value="3"/>
+        <setting key="resource-required.TASKS" value="1"/>
+
         <setting key="args" value="10"/>
         <setting key="args-flag" value="fixed"/>
         <setting key="env" value="JOBID=${TASK_ID}"/>

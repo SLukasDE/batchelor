@@ -39,16 +39,25 @@ public:
 	}
 	 */
 
-	static const int IDENTIFIER = 256;
-	static const int IDENTIFIER_TRUE = 257;
-	static const int IDENTIFIER_FALSE = 258;
-	static const int IDENTIFIER_VAR = 259;
-	static const int IDENTIFIER_PROC = 260;
-	static const int IDENTIFIER_OR = 261;
-	static const int IDENTIFIER_AND = 262;
-
-	static const int STRING = 263;
-	static const int NUMBER = 264;
+	static const int STRING = 256;
+	static const int NUMBER = 257;
+	static const int IDENTIFIER = 258;
+	static const int TRUE = 259;
+	static const int FALSE = 260;
+	static const int EQ = 261;
+	static const int NE = 262;
+	static const int LT = 263;
+	static const int LE = 264;
+	static const int GT = 265;
+	static const int GE = 266;
+	static const int NOT = 267;
+	static const int AND = 268;
+	static const int OR = 269;
+	static const int ADD = 270;
+	static const int SUB = 271;
+	static const int MUL = 272;
+	static const int DIV = 273;
+	static const int VAR_OPEN = 274;
 
 private:
 	/* yyval ptr */

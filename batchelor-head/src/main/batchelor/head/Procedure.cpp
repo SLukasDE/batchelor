@@ -18,10 +18,15 @@
 
 #include <batchelor/head/Logger.h>
 #include <batchelor/head/Procedure.h>
-#include <batchelor/head/RequestHandler.h>
+#include <batchelor/head/requesthandler/Auth.h>
+#include <batchelor/head/requesthandler/Engine.h>
 
 #include <esl/com/http/server/MHDSocket.h>
+#include <esl/com/http/server/RequestContext.h>
 #include <esl/com/http/server/Socket.h>
+#include <esl/io/Input.h>
+#include <esl/object/Context.h>
+#include <esl/object/InitializeContext.h>
 #include <esl/plugin/Registry.h>
 #include <esl/system/Stacktrace.h>
 
@@ -32,55 +37,46 @@ namespace head {
 namespace {
 Logger logger("batchelor::head::Procedure");
 
-std::unique_ptr<esl::com::http::server::RequestHandler> createRequestHandlerSettings(esl::object::Context& context, const Procedure::Settings& settings) {
+class RequestHandler : public esl::com::http::server::RequestHandler, public esl::object::InitializeContext {
+public:
+	RequestHandler(const Procedure::Settings& settings);
+
+	void initializeContext(esl::object::Context& context) override;
+
+	esl::io::Input accept(esl::com::http::server::RequestContext& requestContext) const override;
+
+private:
+	requesthandler::Auth requestHandlerAuth;
+	requesthandler::Engine requestHandlerEngine;
+};
+
+RequestHandler::RequestHandler(const Procedure::Settings& settings)
+: requestHandlerAuth(requesthandler::Auth::Settings(settings)),
+  requestHandlerEngine(requesthandler::Engine::Settings(settings))
+{ }
+
+void RequestHandler::initializeContext(esl::object::Context& context) {
+	requestHandlerEngine.initializeContext(context);
+}
+
+esl::io::Input RequestHandler::accept(esl::com::http::server::RequestContext& requestContext) const {
+	auto rv = requestHandlerAuth.accept(requestContext);
+	if(rv) {
+		return rv;
+	}
+	return requestHandlerEngine.accept(requestContext);
+}
+
+std::unique_ptr<esl::com::http::server::RequestHandler> createRequestHandler(esl::object::Context& context, const Procedure::Settings& settings) {
 	std::unique_ptr<RequestHandler> requestHandler(new RequestHandler(settings));
 	requestHandler->initializeContext(context);
 	return std::unique_ptr<esl::com::http::server::RequestHandler>(requestHandler.release());
 }
+
 }
-#if 0
-Procedure::Settings::Settings(const std::vector<std::pair<std::string, std::string>>& settings) {
-	std::chrono::seconds tmpTimeoutZombie = std::chrono::seconds(0);
-	std::chrono::seconds tmpTimeoutCleanup = std::chrono::seconds(0);
-
-    for(const auto& setting : settings) {
-    	/*
-        if(setting.first == "db-connection-factory") {
-            if(!dbConnectionFactoryId.empty()) {
-                throw esl::system::Stacktrace::add(std::runtime_error("multiple definition of attribute '" + setting.first + "'."));
-            }
-            dbConnectionFactoryId = setting.second;
-            if(dbConnectionFactoryId.empty()) {
-                throw esl::system::Stacktrace::add(std::runtime_error("Invalid value \"\" for attribute '" + setting.first + "'."));
-            }
-        }
-        else if(setting.first == "plugin-id") {
-            if(setting.second.empty()) {
-                throw esl::system::Stacktrace::add(std::runtime_error("Invalid value \"\" for attribute '" + setting.first + "'."));
-            }
-            if(!pluginIds.insert(setting.second).second) {
-                throw esl::system::Stacktrace::add(std::runtime_error("Multiple definition of value \"" + setting.second + "\" for attribute '" + setting.first + "'."));
-            }
-        }
-        else {
-            throw esl::system::Stacktrace::add(std::runtime_error("unknown attribute '" + setting.first + "'."));
-        }
-        */
-        throw esl::system::Stacktrace::add(std::runtime_error("unknown attribute '" + setting.first + "'."));
-    }
-
-	if(tmpTimeoutZombie.count() > 0) {
-		timeoutZombie = tmpTimeoutZombie;
-	}
-
-	if(tmpTimeoutCleanup.count() > 0) {
-		timeoutCleanup = tmpTimeoutCleanup;
-	}
-}
-#endif
 
 Procedure::InitializedSettings::InitializedSettings(esl::object::Context& context, const Settings& settings)
-: requestHandler(createRequestHandlerSettings(context, settings))
+: requestHandler(createRequestHandler(context, settings))
 {
 	for(const auto& id : settings.observerIds) {
 		if(observers.emplace(id, std::ref(context.getObject<plugin::Observer>(id))).second == false) {

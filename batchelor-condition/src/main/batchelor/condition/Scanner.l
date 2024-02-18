@@ -6,9 +6,22 @@
 /* Implementation of yyFlexScanner */ 
 #include <batchelor/condition/Compiler.h>
 #include <batchelor/condition/Scanner.h>
+#include <batchelor/condition/Parser.h>
 
 namespace batchelor {
 namespace condition {
+
+namespace {
+
+Parser::semantic_type* toSemanticType(void* const aSemanticType) {
+	return static_cast<Parser::semantic_type* const>(aSemanticType);
+}
+
+Parser::location_type* toLocationType(void* aLocationType) {
+	return static_cast<Parser::location_type*>(aLocationType);
+}
+
+} /* anonymous namespace */
 
 Scanner::Scanner(std::istream& in)
 : yyFlexLexer(in, std::cout)
@@ -22,13 +35,15 @@ Scanner::Scanner(std::istream& in)
 #define YY_NO_UNISTD_H
 
 #undef  YY_DECL
-#define YY_DECL int batchelor::condition::Scanner::fetchNextToken(void* const semanticType, void* location, batchelor::condition::Compiler& compiler)
+#define YY_DECL int batchelor::condition::Scanner::fetchNextToken(void* const aSemanticType, void* aLocation, batchelor::condition::Compiler& compiler)
 
 /* update location on matching */
 /*
 #define YY_USER_ACTION \
-  location->step(); \
-  location->columns(yyleng);
+	if(location) { \
+		location->step(); \
+		location->columns(yyleng); \
+	}
 */
 
 /* define yyterminate as this instead of NULL */
@@ -43,67 +58,120 @@ Scanner::Scanner(std::istream& in)
 %option noyywrap
 %option c++
 
-NUM     [0-9]+(\.[0-9]+)?
-STR     \"([][a-zA-Z0-9 !�$%&/()={}_]|\.|(\\\"))*\"
+STRING					\"([][a-zA-Z0-9 !�$%&/()={}_]|\.|(\\\"))*\"
+NUMBER					[0-9]+(\.[0-9]+)?
 
 %%
 
-%{          /** Code executed at the beginning of lexer(...) **/
-            //semanticType = aSemanticType;
+%{
+/** Code executed at the beginning of lexer(...) **/
+auto semanticType = toSemanticType(aSemanticType);
+auto location = toLocationType(aLocation);
 %}
 
-\n          {
-               // Update line number
-               //location->lines();
-               compiler.doSomething();
-            }
+\n						{
+							// Update line number
+							//location->lines();
+							if(location) {
+								location->lines();
+							}
+							compiler.doSomething();
+						}
 
-{NUM}                     {
-                            //semanticType->emplace<double>(std::atof(YYText()));
+{STRING}				{
+							std::string str(YYText());
+							if(semanticType) {
+								semanticType->emplace<std::string>(str.substr(1, str.size()-2));
+							}
+							return STRING;
+						}
+
+{NUMBER}				{
+							if(semanticType) {
+								semanticType->emplace<double>(std::atof(YYText()));
+							}
                             return NUMBER;
-                          }
+						}
 
-{STR}                     {
-                            std::string str(YYText());
-                            //semanticType->emplace<std::string>(str.substr(1, str.size()-2));
-                            return STRING;
-                          }
+[a-zA-Z][a-zA-Z0-9_]*	{
+							std::string str(YYText());
+							if(str == "true") {
+								return TRUE;
+							}
+							
+							if(str == "false") {
+								return FALSE;
+							}
+							
+							if(semanticType) {
+								semanticType->emplace<std::string>(str);
+							}
+							return IDENTIFIER;
+						}
 
-&&                        {
-                            return IDENTIFIER_AND;
-                          }
+==						{
+							return EQ;
+						}
 
-\|\|                      {
-                            return IDENTIFIER_OR;
-                          }
+\<\>					{
+							return NE;
+						}
 
-[a-zA-Z][a-zA-Z0-9_]*     {
-                            std::string str(YYText());
-                            if(str == "proc")
-                              return IDENTIFIER_PROC;
+\<						{
+							return LT;
+						}
 
-                            if(str == "var")
-                              return IDENTIFIER_VAR;
+\<=						{
+							return LE;
+						}
 
-                            if(str == "true")
-                              return IDENTIFIER_TRUE;
+\>						{
+							return GT;
+						}
 
-                            if(str == "false")
-                              return IDENTIFIER_FALSE;
+\>=						{
+							return GE;
+						}
 
-                            return IDENTIFIER;
-                          }
+!						{
+							return NOT;
+						}
 
+&&						{
+							return AND;
+						}
 
-[ \t]                   ;
+\|\|					{
+							return OR;
+						}
 
-.                         {
-                            //semanticType->emplace<char>(YYText()[0]);
-                            //return CHAR;
-                            return yytext[0];
-                          }
+\+						{
+							return ADD;
+						}
 
+-						{
+							return SUB;
+						}
 
+\*						{
+							return MUL;
+						}
+
+\/						{
+							return DIV;
+						}
+
+$\{						{
+							return VAR_OPEN;
+						}
+
+[ \t]					;
+
+.						{
+							//semanticType->emplace<char>(YYText()[0]);
+							//return CHAR;
+							return yytext[0];
+						}
 
 %%
 

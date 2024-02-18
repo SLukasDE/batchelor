@@ -3,6 +3,8 @@
 
 #include <batchelor/common/plugin/ConnectionFactory.h>
 
+#include <batchelor/service/Service.h>
+
 #include <batchelor/ui/Procedure.h>
 
 #include <esl/com/http/client/Connection.h>
@@ -47,8 +49,13 @@ private:
 		InitializedSettings(esl::object::Context& context, const Settings& settings);
 
 		std::vector<std::pair<std::string, std::reference_wrapper<common::plugin::ConnectionFactory>>> connectionFactories;
-		//esl::com::http::client::ConnectionFactory& httpConnectionFactory;
 	};
+
+	esl::io::Input responseShowTask(esl::com::http::server::RequestContext& requestContext, service::Service& service, const std::string& taskId) const;
+	esl::io::Input responseShowTasks(esl::com::http::server::RequestContext& requestContext, service::Service& service) const;
+	esl::io::Input responseSendEvent(esl::com::http::server::RequestContext& requestContext, service::Service& service, const std::string& eventType) const;
+	esl::io::Input responseShowEventTypes(esl::com::http::server::RequestContext& requestContext, service::Service& service) const;
+	esl::io::Input responseMainPage(esl::com::http::server::RequestContext& requestContext) const;
 
 	const Settings settings;
 	std::unique_ptr<InitializedSettings> initializedSettings;

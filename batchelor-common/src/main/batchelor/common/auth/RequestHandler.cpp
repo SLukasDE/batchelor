@@ -1,5 +1,23 @@
-#include <batchelor/head/Logger.h>
-#include <batchelor/head/requesthandler/Auth.h>
+/*
+ * This file is part of Batchelor.
+ * Copyright (C) 2023-2024 Sven Lukas
+ *
+ * Batchelor is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Batchelor is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public
+ * License along with Batchelor.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+#include <batchelor/common/auth/RequestHandler.h>
+#include <batchelor/common/Logger.h>
 
 #include <esl/com/http/server/exception/StatusCode.h>
 #include <esl/com/http/server/Response.h>
@@ -13,14 +31,13 @@
 #include <string>
 
 namespace batchelor {
-namespace head {
-namespace requesthandler {
+namespace common {
+namespace auth {
 
 namespace {
-Logger logger("batchelor::head::requesthandler::Auth");
+Logger logger("batchelor::common::auth::RequestHandler");
 
-void addAuthData(esl::com::http::server::RequestContext& requestContext, const std::map<std::string, std::set<Procedure::Settings::Role>>& rolesByNamespace) {
-#if 1
+void addAuthData(esl::com::http::server::RequestContext& requestContext, const std::map<std::string, std::set<UserData::Role>>& rolesByNamespace) {
 	esl::object::Value<std::vector<std::pair<std::string, std::string>>>* authDataPtr;
 	authDataPtr = requestContext.getObjectContext().findObject<esl::object::Value<std::vector<std::pair<std::string, std::string>>>>("auth-data");
 
@@ -33,71 +50,26 @@ void addAuthData(esl::com::http::server::RequestContext& requestContext, const s
 
 	for(const auto& namespaceRoles : rolesByNamespace) {
 		for(const auto& role : namespaceRoles.second) {
-			switch(role) {
-			case Procedure::Settings::Role::execute:
-				authDataPtr->get().emplace_back("batchelor", namespaceRoles.first + ":execute");
-				break;
-			case Procedure::Settings::Role::readOnly:
-				authDataPtr->get().emplace_back("batchelor", namespaceRoles.first + ":read-only");
-				break;
-			case Procedure::Settings::Role::worker:
-				authDataPtr->get().emplace_back("batchelor", namespaceRoles.first + ":worker");
-				break;
-			}
+			authDataPtr->get().emplace_back("batchelor", namespaceRoles.first + ":" + UserData::fromRole(role));
 		}
 	}
-#else
-	std::unique_ptr<esl::object::Value<std::map<std::string, std::set<Procedure::Settings::Role>>>> rolesByNamespaceValuePtr;
-	rolesByNamespaceValuePtr.reset(new esl::object::Value<std::map<std::string, std::set<Procedure::Settings::Role>>>(rolesByNamespace));
-	requestContext.getObjectContext().addObject("rolesByNamespaceValue", std::move(rolesByNamespaceValuePtr));
-#endif
 }
 } /* namespace */
 
-Auth::Settings::Settings(const std::vector<std::pair<std::string, std::string>>& settings) {
+RequestHandler::Settings::Settings(const std::vector<std::pair<std::string, std::string>>& settings) {
 	for(const auto& setting : settings) {
 		if(setting.first == "api-key") {
-			// api-key = <api key>:<namespace>:<role>
+			// basic = <user name>:plain:<api key>
 			auto values = esl::utility::String::split(setting.second, ':', false);
 			if(values.size() != 3) {
 				throw esl::system::Stacktrace::add(std::runtime_error("Invalid value \"" + setting.second + "\" of key '" + setting.first + "'."));
 			}
-			Procedure::Settings::APIKeyData& apiKeyData = apiKeys[values[0]];
-			apiKeyData.apiKey = values[0];
-			std::set<Procedure::Settings::Role>& roles = apiKeyData.rolesByNamespace[values[1]];
-			if(values[2] == "execute") {
-				roles.insert(Procedure::Settings::Role::execute);
-			}
-			else if(values[2] == "read-only") {
-				roles.insert(Procedure::Settings::Role::readOnly);
-			}
-			else if(values[2] == "worker") {
-				roles.insert(Procedure::Settings::Role::worker);
+
+			if(values[1] == "plain") {
+				userByPlainApiKey[values[2]] = values[0];
 			}
 			else {
-				throw esl::system::Stacktrace::add(std::runtime_error("Unknown role \"" + values[2] + "\" for in value \"" + setting.second + "\" at key '" + setting.first + "'."));
-			}
-		}
-		else if(setting.first == "user") {
-			// user = <user name>:<namespace>:<role>
-			auto values = esl::utility::String::split(setting.second, ':', false);
-			if(values.size() != 3) {
-				throw esl::system::Stacktrace::add(std::runtime_error("Invalid value \"" + setting.second + "\" of key '" + setting.first + "'."));
-			}
-			Procedure::Settings::UserData& userData = users[values[0]];
-			userData.userName = values[0];
-			std::set<Procedure::Settings::Role>& roles = userData.rolesByNamespace[values[1]];
-			if(values[2] == "execute") {
-				roles.insert(Procedure::Settings::Role::execute);
-			}
-			else if(values[2] == "read-only") {
-				roles.insert(Procedure::Settings::Role::readOnly);
-			}
-			else if(values[2] == "worker") {
-				roles.insert(Procedure::Settings::Role::worker);
-			}
-			else {
-				throw esl::system::Stacktrace::add(std::runtime_error("Unknown role \"" + values[2] + "\" for in value \"" + setting.second + "\" at key '" + setting.first + "'."));
+				throw esl::system::Stacktrace::add(std::runtime_error("Unknown type \"" + values[1] + "\" in value \"" + setting.second + "\" of key '" + setting.first + "'."));
 			}
 		}
 		else if(setting.first == "basic-auth") {
@@ -106,13 +78,27 @@ Auth::Settings::Settings(const std::vector<std::pair<std::string, std::string>>&
 			if(values.size() != 3) {
 				throw esl::system::Stacktrace::add(std::runtime_error("Invalid value \"" + setting.second + "\" of key '" + setting.first + "'."));
 			}
-			Procedure::Settings::UserData& userData = users[values[0]];
-			userData.userName = values[0];
+			auto& password = plainBasicAuthByUser[values[0]];
 			if(values[1] == "plain") {
-				userData.pw = values[2];
+				password = values[2];
 			}
 			else {
-				throw esl::system::Stacktrace::add(std::runtime_error("Unknown pw type \"" + values[1] + "\" for in value \"" + setting.second + "\" at key '" + setting.first + "'."));
+				throw esl::system::Stacktrace::add(std::runtime_error("Unknown type \"" + values[1] + "\" in value \"" + setting.second + "\" of key '" + setting.first + "'."));
+			}
+		}
+		else if(setting.first == "user") {
+			// user = <user name>:<namespace>:<role>
+			auto values = esl::utility::String::split(setting.second, ':', false);
+			if(values.size() != 3) {
+				throw esl::system::Stacktrace::add(std::runtime_error("Invalid value \"" + setting.second + "\" of key '" + setting.first + "'."));
+			}
+			UserData& userData = users[values[0]];
+			std::set<UserData::Role>& roles = userData.rolesByNamespace[values[1]];
+			try {
+				roles.insert(UserData::toRole(values[2]));
+			}
+			catch(...) {
+				throw esl::system::Stacktrace::add(std::runtime_error("Unknown role \"" + values[2] + "\" for in value \"" + setting.second + "\" at key '" + setting.first + "'."));
 			}
 		}
 		else if(setting.first == "realm") {
@@ -134,27 +120,37 @@ Auth::Settings::Settings(const std::vector<std::pair<std::string, std::string>>&
 	}
 }
 
-Auth::Settings::Settings(const Procedure::Settings& settings)
-: apiKeys(settings.apiKeys),
-  users(settings.users)
+RequestHandler::Settings::Settings(const std::map<std::string, UserData>& aUsers, const std::map<std::string, std::string>& aUserByPlainApiKey, const std::map<std::string, std::string>& aPlainBasicAuthByUser)
+: users(aUsers),
+  userByPlainApiKey(aUserByPlainApiKey),
+  plainBasicAuthByUser(aPlainBasicAuthByUser)
 { }
 
-Auth::Auth(const Settings& aSettings)
+RequestHandler::RequestHandler(const Settings& aSettings)
 : settings(aSettings)
 { }
 
-std::unique_ptr<esl::com::http::server::RequestHandler> Auth::create(const std::vector<std::pair<std::string, std::string>>& settings) {
-	return std::unique_ptr<esl::com::http::server::RequestHandler>(new Auth(Settings(settings)));
+std::unique_ptr<esl::com::http::server::RequestHandler> RequestHandler::create(const std::vector<std::pair<std::string, std::string>>& settings) {
+	return std::unique_ptr<esl::com::http::server::RequestHandler>(new RequestHandler(Settings(settings)));
 }
 
-esl::io::Input Auth::accept(esl::com::http::server::RequestContext& requestContext) const {
-	if(settings.apiKeys.empty() && settings.users.empty()) {
+esl::io::Input RequestHandler::accept(esl::com::http::server::RequestContext& requestContext) const {
+	if(settings.users.empty() && settings.userByPlainApiKey.empty() && settings.plainBasicAuthByUser.empty()) {
 		return esl::io::Input();
 	}
 
 	try {
 		const auto& headers = requestContext.getRequest().getHeaders();
+		auto headersIter = headers.begin();
+#if 1
+		for(;headersIter != headers.end(); ++headersIter) {
+			if(esl::utility::String::toLower(headersIter->first) == "authorization") {
+				break;
+			}
+		}
+#else
 		auto headersIter = headers.find("Authorization");
+#endif
 		if(headersIter == headers.end()) {
 			throw esl::com::http::server::exception::StatusCode(401);
 		}
@@ -185,13 +181,20 @@ esl::io::Input Auth::accept(esl::com::http::server::RequestContext& requestConte
 			}
 
 			const std::string& apiKey = authorizationHeaderSplit[1];
-			auto apiKeyIter = settings.apiKeys.find(apiKey);
-			if(apiKeyIter == settings.apiKeys.end()) {
+
+			auto apiKeyIter = settings.userByPlainApiKey.find(apiKey);
+			if(apiKeyIter == settings.userByPlainApiKey.end()) {
+				throw esl::com::http::server::exception::StatusCode(401);
+			}
+			const auto& username = apiKeyIter->second;
+
+			auto usersIter = settings.users.find(username);
+			if(usersIter == settings.users.end()) {
 				throw esl::com::http::server::exception::StatusCode(401);
 			}
 
-			auto& apiKeyData = apiKeyIter->second;
-			addAuthData(requestContext, apiKeyData.rolesByNamespace);
+			auto& userData = usersIter->second;
+			addAuthData(requestContext, userData.rolesByNamespace);
 		}
 		else if(authorizationHeaderSplit[0] == "Basic") {
 			if(authorizationHeaderSplit.size() < 2) {
@@ -230,16 +233,21 @@ esl::io::Input Auth::accept(esl::com::http::server::RequestContext& requestConte
 				throw esl::com::http::server::exception::StatusCode(400);
 			}
 
+			auto basicAuthIter = settings.plainBasicAuthByUser.find(username);
+			if(basicAuthIter == settings.plainBasicAuthByUser.end()) {
+				throw esl::com::http::server::exception::StatusCode(401);
+			}
+			const auto& basicAuthPassword = basicAuthIter->second;
+			if(basicAuthPassword != password) {
+				throw esl::com::http::server::exception::StatusCode(401);
+			}
+
 			auto usersIter = settings.users.find(username);
 			if(usersIter == settings.users.end()) {
 				throw esl::com::http::server::exception::StatusCode(401);
 			}
 
 			auto& userData = usersIter->second;
-			if(userData.pw != password) {
-				throw esl::com::http::server::exception::StatusCode(401);
-			}
-
 			addAuthData(requestContext, userData.rolesByNamespace);
 		}
 		else {
@@ -277,6 +285,6 @@ esl::io::Input Auth::accept(esl::com::http::server::RequestContext& requestConte
 	return esl::io::Input();
 }
 
-} /* namespace requesthandler */
-} /* namespace head */
+} /* namespace auth */
+} /* namespace common */
 } /* namespace batchelor */

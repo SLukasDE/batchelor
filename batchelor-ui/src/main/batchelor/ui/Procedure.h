@@ -1,6 +1,6 @@
 /*
  * This file is part of Batchelor.
- * Copyright (C) 2023 Sven Lukas
+ * Copyright (C) 2023-2024 Sven Lukas
  *
  * Batchelor is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -19,6 +19,7 @@
 #ifndef BATCHELOR_UI_PROCEDURE_H_
 #define BATCHELOR_UI_PROCEDURE_H_
 
+#include <batchelor/common/auth/UserData.h>
 #include <batchelor/common/plugin/ConnectionFactory.h>
 #include <batchelor/common/plugin/Socket.h>
 #include <batchelor/common/Procedure.h>
@@ -33,7 +34,6 @@
 #include <mutex>
 #include <set>
 #include <string>
-#include <utility>
 #include <vector>
 
 namespace batchelor {
@@ -43,6 +43,11 @@ class Procedure : public common::Procedure {
 public:
 	struct Settings {
 		Settings() = default;
+
+		std::map<std::string, common::auth::UserData> users;
+
+		std::map<std::string, std::string> userByPlainApiKey;
+		std::map<std::string, std::string> plainBasicAuthByUser;
 
 		std::string namespaceId = "default";
 		std::set<std::string> socketIds;

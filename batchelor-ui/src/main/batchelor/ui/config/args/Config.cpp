@@ -1,6 +1,6 @@
 /*
  * This file is part of Batchelor.
- * Copyright (C) 2023 Sven Lukas
+ * Copyright (C) 2023-2024 Sven Lukas
  *
  * Batchelor is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -59,6 +59,24 @@ void Config::printUsage() {
 	std::cout << "  -c, --certificate      <host> <key> <crt> Defines a certificate to use for hostname <host>. The certificate is repesented as\n";
 	std::cout << "                                            two files, the key-file, specified by <key> and the cert-file, specified by <crt>.\n";
 	std::cout << "\n";
+	std::cout << "  -U, --user             <user> <ns> <role> Defines an user <user> to have a role <role> at namespace <ns>\n";
+	std::cout << "                                            To add several role-to-namespace settings to an user, just repeat the definition\n";
+	std::cout << "                                            several times with the same user <user>, but different values for <role> and <ns>.\n";
+	std::cout << "                                            Following roles are available:\n";
+	std::cout << "                                            * read-only: A controller needs this role to watch information of tasks.\n";
+	std::cout << "                                            * execute:   A controller needs this role to send events-\n";
+	std::cout << "                                            * worker:    A worker needs this role to provide event types.\n";
+	std::cout << "\n";
+	std::cout << "  -A, --api-key          <user> <api-key>   Defines an API key for a user <user> used if bearer-authentication is used over https.\n";
+	std::cout << "                                            The API key is specified in <api-key> that has format \"<encryption>:<value>\".\n";
+	std::cout << "                                            There are several values available for <encryption>:\n";
+	std::cout << "                                            * plain:<value>      Defines the API key as plain text in <value>.\n";
+	std::cout << "\n";
+	std::cout << "  -B, --basic-auth       <user> <pw>        Defines a password for a user <user> used if basic-authentication is used over https.\n";
+	std::cout << "                                            The password is specified in <pw> that has format \"<encryption>:<value>\".\n";
+	std::cout << "                                            There are several values available for <encryption>:\n";
+	std::cout << "                                            * plain:<value>      Defines the password as plain text in <value>.\n";
+	std::cout << "\n";
 	std::cout << "  -S, --socket           <plugin>           Defines a socket to listen for requests.\n";
 	std::cout << "                                            Subsequent settings specified by \"--setting\" are specific to the plugin.\n";
 	std::cout << "\n";
@@ -94,6 +112,18 @@ Config::Config(esl::object::Context& aContext, Procedure::Settings& aSettings, i
 		else if(currentArg == "-c"  || currentArg == "--certificate") {
 			addCertificate(i+1 < argc ? argv[i+1] : nullptr, i+2 < argc ? argv[i+2] : nullptr, i+3 < argc ? argv[i+3] : nullptr);
 			i = i+3;
+		}
+		else if(currentArg == "-U"  || currentArg == "--user") {
+			addUser(i+1 < argc ? argv[i+1] : nullptr, i+2 < argc ? argv[i+2] : nullptr, i+3 < argc ? argv[i+3] : nullptr);
+			i = i+3;
+		}
+		else if(currentArg == "-A"  || currentArg == "--api-key") {
+			addApiKey(i+1 < argc ? argv[i+1] : nullptr, i+2 < argc ? argv[i+2] : nullptr);
+			i = i+2;
+		}
+		else if(currentArg == "-B"  || currentArg == "--basic-auth") {
+			addBasicAuth(i+1 < argc ? argv[i+1] : nullptr, i+2 < argc ? argv[i+2] : nullptr);
+			i = i+2;
 		}
 		else if(currentArg == "-S"  || currentArg == "--socket") {
 			addSocket(i+1 < argc ? argv[i+1] : nullptr);
@@ -209,6 +239,61 @@ void Config::addCertificate(const char* hostName, const char* keyFile, const cha
 
 	keyStore->addCertificate(hostName, certificate);
 	keyStore->addPrivateKey(hostName, key, "");
+}
+
+void Config::addApiKey(const char* user, const char* apikey) {
+	if(!user) {
+		throw ArgumentsException("User name missing of option \"--basic-auth\".");
+	}
+
+	if(!apikey) {
+		throw ArgumentsException("API key missing of option \"--api-key\".");
+	}
+
+	std::string apik = apikey;
+	if(apik.substr(0, 6) == "plain:") {
+		settings.userByPlainApiKey[apik.substr(6)] = user;
+	}
+	else {
+	//if(userData.pw.empty()) {
+		throw ArgumentsException("Invalid value \"" + apik + "\" for api-key of option \"--api-key\".");
+	}
+}
+
+void Config::addBasicAuth(const char* user, const char* password) {
+	if(!user) {
+		throw ArgumentsException("User name missing of option \"--basic-auth\".");
+	}
+
+	if(!password) {
+		throw ArgumentsException("Password missing of option \"--basic-auth\".");
+	}
+
+	std::string pw = password;
+	if(pw.substr(0, 6) == "plain:") {
+		settings.plainBasicAuthByUser[user] = pw.substr(6);
+	}
+
+	if(settings.plainBasicAuthByUser[user].empty()) {
+		throw ArgumentsException("Invalid value \"" + pw + "\" for password of option \"--basic-auth\".");
+	}
+}
+
+void Config::addUser(const char* user, const char* namespaceId, const char* roleStr) {
+	if(!user) {
+		throw ArgumentsException("User name missing of option \"--user\".");
+	}
+
+	if(!namespaceId) {
+		throw ArgumentsException("Namespace missing of option \"--user\".");
+	}
+
+	if(!roleStr) {
+		throw ArgumentsException("Role missing of option \"--user\".");
+	}
+
+	auto& userData = settings.users[user];
+	userData.rolesByNamespace[namespaceId].insert(common::auth::UserData::toRole(roleStr));
 }
 
 void Config::addSocket(const char* implementation) {

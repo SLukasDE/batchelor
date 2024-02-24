@@ -1,6 +1,6 @@
 /*
  * This file is part of Batchelor.
- * Copyright (C) 2023 Sven Lukas
+ * Copyright (C) 2023-2024 Sven Lukas
  *
  * Batchelor is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -16,31 +16,69 @@
  * License along with Batchelor.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <batchelor/common/auth/RequestHandler.h>
+
 #include <batchelor/ui/Logger.h>
 #include <batchelor/ui/Procedure.h>
 #include <batchelor/ui/RequestHandler.h>
 
 #include <esl/com/http/server/MHDSocket.h>
+#include <esl/com/http/server/RequestContext.h>
 #include <esl/com/http/server/Socket.h>
+#include <esl/io/Input.h>
+#include <esl/object/Context.h>
+#include <esl/object/InitializeContext.h>
 #include <esl/plugin/Registry.h>
 #include <esl/system/Stacktrace.h>
 
 #include <stdexcept>
+#include <utility>
 
 namespace batchelor {
 namespace ui {
 namespace {
 Logger logger("batchelor::ui::Procedure");
 
-std::unique_ptr<esl::com::http::server::RequestHandler> createRequestHandlerSettings(esl::object::Context& context, const Procedure::Settings& settings) {
-	std::unique_ptr<RequestHandler> requestHandler(new RequestHandler(settings));
+class MyRequestHandler : public esl::com::http::server::RequestHandler, public esl::object::InitializeContext {
+public:
+	MyRequestHandler(const Procedure::Settings& settings);
+
+	void initializeContext(esl::object::Context& context) override;
+
+	esl::io::Input accept(esl::com::http::server::RequestContext& requestContext) const override;
+
+private:
+	common::auth::RequestHandler requestHandlerAuth;
+	ui::RequestHandler requestHandlerEngine;
+};
+
+MyRequestHandler::MyRequestHandler(const Procedure::Settings& settings)
+: requestHandlerAuth(common::auth::RequestHandler::Settings(settings.users, settings.userByPlainApiKey, settings.plainBasicAuthByUser)),
+  requestHandlerEngine(ui::RequestHandler::Settings(settings))
+{ }
+
+void MyRequestHandler::initializeContext(esl::object::Context& context) {
+	requestHandlerEngine.initializeContext(context);
+}
+
+esl::io::Input MyRequestHandler::accept(esl::com::http::server::RequestContext& requestContext) const {
+	auto rv = requestHandlerAuth.accept(requestContext);
+	if(rv) {
+		return rv;
+	}
+	return requestHandlerEngine.accept(requestContext);
+}
+
+std::unique_ptr<esl::com::http::server::RequestHandler> createRequestHandler(esl::object::Context& context, const Procedure::Settings& settings) {
+	std::unique_ptr<MyRequestHandler> requestHandler(new MyRequestHandler(settings));
 	requestHandler->initializeContext(context);
 	return std::unique_ptr<esl::com::http::server::RequestHandler>(requestHandler.release());
 }
+
 }
 
 Procedure::InitializedSettings::InitializedSettings(esl::object::Context& context, const Settings& settings)
-: requestHandler(createRequestHandlerSettings(context, settings))
+: requestHandler(createRequestHandler(context, settings))
 {
 	for(const auto& connectionId : settings.connectionFactoryIds) {
 		common::plugin::ConnectionFactory& connectionFactory = context.getObject<common::plugin::ConnectionFactory>(connectionId);

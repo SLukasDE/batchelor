@@ -1,6 +1,6 @@
 /*
  * This file is part of Batchelor.
- * Copyright (C) 2023 Sven Lukas
+ * Copyright (C) 2023-2024 Sven Lukas
  *
  * Batchelor is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -16,11 +16,11 @@
  * License along with Batchelor.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <batchelor/common/auth/RequestHandler.h>
 #include <batchelor/common/Plugin.h>
 
 #include <batchelor/head/Plugin.h>
-#include <batchelor/head/requesthandler/Auth.h>
-#include <batchelor/head/requesthandler/Engine.h>
+#include <batchelor/head/RequestHandler.h>
 
 namespace batchelor {
 namespace head {
@@ -30,8 +30,8 @@ void Plugin::install(esl::plugin::Registry& registry, const char* data) {
 
 	common::Plugin::install(esl::plugin::Registry::get(), nullptr);
 
-	registry.addPlugin("batchelor-auth", requesthandler::Auth::create);
-	registry.addPlugin("batchelor-head", requesthandler::Engine::create);
+	registry.addPlugin("batchelor-auth", common::auth::RequestHandler::create);
+	registry.addPlugin("batchelor-head", RequestHandler::create);
 }
 
 } /* namespace head */

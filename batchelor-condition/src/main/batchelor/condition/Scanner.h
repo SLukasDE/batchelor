@@ -1,3 +1,21 @@
+/*
+ * This file is part of Batchelor.
+ * Copyright (C) 2023-2024 Sven Lukas
+ *
+ * Batchelor is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Batchelor is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public
+ * License along with Batchelor.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #ifndef BATCHELOR_CONDITION_SCANNER_H_
 #define BATCHELOR_CONDITION_SCANNER_H_
 
@@ -30,34 +48,13 @@ public:
 	 * To make the parser calling Scanner::fetchNextToken(...) instead of ::yylex(...) there is another definition in Parser.yy:
 	 * #define yylex scanner.fetchNextToken
 	 */
-	//virtual int fetchNextToken(Compiler& compiler);
-	virtual int fetchNextToken(void* const semanticType, void* location, Compiler& Compiler);
+	virtual int fetchNextToken(void* const semanticType, void* location, const Compiler& compiler);
 	/*
-	int Scanner::fetchNextToken(void* const aSemanticType, void* aLocation, Compiler& Compiler) {
+	int Scanner::fetchNextToken(void* const aSemanticType, void* aLocation, Compiler& compiler) {
 		Parser::semantic_type* const semanticType = static_cast<Parser::semantic_type* const>(aSemanticType);
 		Parser::location_type* location = static_cast<Parser::location_type*>(aLocation);
 	}
 	 */
-
-	static const int STRING = 256;
-	static const int NUMBER = 257;
-	static const int IDENTIFIER = 258;
-	static const int TRUE = 259;
-	static const int FALSE = 260;
-	static const int EQ = 261;
-	static const int NE = 262;
-	static const int LT = 263;
-	static const int LE = 264;
-	static const int GT = 265;
-	static const int GE = 266;
-	static const int NOT = 267;
-	static const int AND = 268;
-	static const int OR = 269;
-	static const int ADD = 270;
-	static const int SUB = 271;
-	static const int MUL = 272;
-	static const int DIV = 273;
-	static const int VAR_OPEN = 274;
 
 private:
 	/* yyval ptr */

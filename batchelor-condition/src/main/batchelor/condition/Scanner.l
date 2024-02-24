@@ -35,7 +35,7 @@ Scanner::Scanner(std::istream& in)
 #define YY_NO_UNISTD_H
 
 #undef  YY_DECL
-#define YY_DECL int batchelor::condition::Scanner::fetchNextToken(void* const aSemanticType, void* aLocation, batchelor::condition::Compiler& compiler)
+#define YY_DECL int batchelor::condition::Scanner::fetchNextToken(void* const aSemanticType, void* aLocation, const batchelor::condition::Compiler& compiler)
 
 /* update location on matching */
 /*
@@ -58,7 +58,7 @@ Scanner::Scanner(std::istream& in)
 %option noyywrap
 %option c++
 
-STRING					\"([][a-zA-Z0-9 !�$%&/()={}_]|\.|(\\\"))*\"
+STRING					\"([][a-zA-Z0-9 !�$%&/()={}_-]|\.|(\\\"))*\"
 NUMBER					[0-9]+(\.[0-9]+)?
 
 %%
@@ -71,11 +71,10 @@ auto location = toLocationType(aLocation);
 
 \n						{
 							// Update line number
-							//location->lines();
 							if(location) {
 								location->lines();
 							}
-							compiler.doSomething();
+							//compiler.doSomething();
 						}
 
 {STRING}				{
@@ -83,86 +82,90 @@ auto location = toLocationType(aLocation);
 							if(semanticType) {
 								semanticType->emplace<std::string>(str.substr(1, str.size()-2));
 							}
-							return STRING;
+							return Parser::token_type::STRING;
 						}
 
 {NUMBER}				{
 							if(semanticType) {
 								semanticType->emplace<double>(std::atof(YYText()));
 							}
-                            return NUMBER;
+                            return Parser::token_type::NUMBER;
 						}
 
 [a-zA-Z][a-zA-Z0-9_]*	{
 							std::string str(YYText());
 							if(str == "true") {
-								return TRUE;
+								return Parser::token_type::TRUE;
 							}
 							
 							if(str == "false") {
-								return FALSE;
+								return Parser::token_type::FALSE;
 							}
 							
 							if(semanticType) {
 								semanticType->emplace<std::string>(str);
 							}
-							return IDENTIFIER;
+							return Parser::token_type::IDENTIFIER;
 						}
 
 ==						{
-							return EQ;
+							return Parser::token_type::EQ;
 						}
 
 \<\>					{
-							return NE;
+							return Parser::token_type::NE;
+						}
+
+!=						{
+							return Parser::token_type::NE;
 						}
 
 \<						{
-							return LT;
+							return Parser::token_type::LT;
 						}
 
 \<=						{
-							return LE;
+							return Parser::token_type::LE;
 						}
 
 \>						{
-							return GT;
+							return Parser::token_type::GT;
 						}
 
 \>=						{
-							return GE;
+							return Parser::token_type::GE;
 						}
 
 !						{
-							return NOT;
+							return Parser::token_type::NOT;
 						}
 
 &&						{
-							return AND;
+							return Parser::token_type::AND;
 						}
 
 \|\|					{
-							return OR;
+							return Parser::token_type::OR;
 						}
 
 \+						{
-							return ADD;
+							return Parser::token_type::ADD;
 						}
 
 -						{
-							return SUB;
+							return Parser::token_type::SUB;
 						}
 
 \*						{
-							return MUL;
+							return Parser::token_type::MUL;
 						}
 
 \/						{
-							return DIV;
+							return Parser::token_type::DIV;
 						}
 
 $\{						{
-							return VAR_OPEN;
+							return Parser::token_type::VAR_OPEN;
 						}
 
 [ \t]					;

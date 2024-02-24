@@ -7,6 +7,7 @@
     
     <setting key="maximum-tasks-running" value="3"/>
     
-    <!--user-defined-metric key="OS" value="zLinux"/-->
-    <metric key="CLOUD_ID" value="REWE-OnPrem|REWE-GCP"/>
+    <metric key="OS" value="zLinux"/>
+    <metric key="CLOUD_ID" value="GCP"/>
+    <!--metric key="CLOUD_ID" value="OnPrem"/-->
 </batchelor>

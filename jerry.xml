@@ -14,23 +14,23 @@
 		<parameter key="port" value="8080"/>
 		<parameter key="threads" value="4"/>
 		
-		<database id="my-db" implementation="esl/database/SQLiteConnectionFactory">
-			<!-- parameter key="URI" value="file:my.db?mode=rw"/ -->
+		<!--database id="my-db" implementation="esl/database/SQLiteConnectionFactory">
 			<parameter key="URI" value="file:test?mode=memory"/>
-		</database>
+		</database-->
 
 		<!--http-requesthandler implementation="jerry/log"/-->
 
 		<http-requesthandler implementation="batchelor-auth">
-			<parameter key="api-key"    value="AXBS5:default:execute"/>
-			<parameter key="api-key"    value="AXBS5:default:worker"/>
 			<parameter key="user"       value="hans:default:execute"/>
+			<parameter key="user"       value="worker:default:execute"/>
+			<parameter key="user"       value="worker:default:worker"/>
 			<parameter key="basic-auth" value="hans:plain:wurst"/>
+			<parameter key="api-key"    value="worker:plain:AXBS5"/>
 			<parameter key="realm"      value="batchelor"/>
 		</http-requesthandler>
 
 		<http-requesthandler implementation="batchelor-head">
-			<parameter key="db-connection-factory" value="my-db"/>
+			<!--parameter key="db-connection-factory" value="my-db"/-->
 			<parameter key="zombie-timeout" value="5 min"/>
 			<parameter key="cleanup-timeout" value="1h"/>
 		</http-requesthandler>

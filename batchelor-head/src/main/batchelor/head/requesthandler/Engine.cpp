@@ -1,3 +1,22 @@
+#if 0
+/*
+ * This file is part of Batchelor.
+ * Copyright (C) 2023-2024 Sven Lukas
+ *
+ * Batchelor is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Batchelor is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public
+ * License along with Batchelor.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #include <batchelor/common/Timestamp.h>
 
 #include <batchelor/head/Logger.h>
@@ -5,6 +24,7 @@
 #include <batchelor/head/Service.h>
 
 #include <esl/com/http/server/exception/StatusCode.h>
+#include <esl/database/SQLiteConnectionFactory.h>
 #include <esl/object/Value.h>
 #include <esl/system/Stacktrace.h>
 #include <esl/utility/String.h>
@@ -83,7 +103,12 @@ Engine::Settings::Settings(const Procedure::Settings& settings)
 { }
 
 Engine::InitializedSettings::InitializedSettings(esl::object::Context& context, const Settings& settings)
-: dbConnectionFactory(context.getObject<esl::database::ConnectionFactory>(settings.dbConnectionFactoryId))
+: dbConnectionFactoryPtr(settings.dbConnectionFactoryId.empty() ? esl::database::SQLiteConnectionFactory::createNative(esl::database::SQLiteConnectionFactory::Settings({
+		//{{"URI"}, {":memory:"}}
+		{{"URI"}, {"file:test?mode=memory"}}
+		//{{"URI"}, {"file::memory:?mode=rw"}}
+	})) : nullptr),
+  dbConnectionFactory(settings.dbConnectionFactoryId.empty() ? *dbConnectionFactoryPtr.get() : context.getObject<esl::database::ConnectionFactory>(settings.dbConnectionFactoryId))
 {
 	for(const auto& pluginId : settings.pluginIds) {
 		plugins.emplace_back(std::ref(context.getObject<plugin::Observer>(pluginId)));
@@ -178,3 +203,5 @@ void Engine::threadStop() {
 } /* namespace requesthandler */
 } /* namespace head */
 } /* namespace batchelor */
+#endif
+

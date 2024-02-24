@@ -1,6 +1,6 @@
 /*
  * This file is part of Batchelor.
- * Copyright (C) 2023 Sven Lukas
+ * Copyright (C) 2023-2024 Sven Lukas
  *
  * Batchelor is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -16,6 +16,7 @@
  * License along with Batchelor.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <batchelor/common/auth/UserData.h>
 #include <batchelor/common/config/args/ArgumentsException.h>
 #include <batchelor/common/plugin/Socket.h>
 
@@ -40,26 +41,6 @@ namespace args {
 using batchelor::common::config::args::ArgumentsException;
 using esl::utility::String;
 
-namespace {
-
-Procedure::Settings::Role toRole(const std::string& roleStr) {
-	if(roleStr == "read-only") {
-		return Procedure::Settings::Role::readOnly;
-	}
-
-	if(roleStr == "execute") {
-		return Procedure::Settings::Role::execute;
-	}
-
-	if(roleStr == "worker") {
-		return Procedure::Settings::Role::worker;
-	}
-
-	throw ArgumentsException("Invalid value \"" + roleStr + "\" for role.");
-}
-
-}
-
 void Config::printUsage() {
 	std::cout << "batchelor-head [OPTIONS]...\n";
 	std::cout << "\n";
@@ -82,13 +63,10 @@ void Config::printUsage() {
 	std::cout << "                                            * execute:   A controller needs this role to send events-\n";
 	std::cout << "                                            * worker:    A worker needs this role to provide event types.\n";
 	std::cout << "\n";
-	std::cout << "  -A, --api-key          <apik> <ns> <role> Defines an API key <apik> to be used with role <role> at namespace <ns>\n";
-	std::cout << "                                            To add several role-to-namespace settings to an API key, just repeat the definition\n";
-	std::cout << "                                            several times with the same API key <apik>, but different values for <role> and <ns>.\n";
-	std::cout << "                                            Following roles are available:\n";
-	std::cout << "                                            * read-only: A controller needs this role to watch information of tasks.\n";
-	std::cout << "                                            * execute:   A controller needs this role to send events-\n";
-	std::cout << "                                            * worker:    A worker needs this role to provide event types.\n";
+	std::cout << "  -A, --api-key          <user> <api-key>   Defines an API key for a user <user> used if bearer-authentication is used over https.\n";
+	std::cout << "                                            The API key is specified in <api-key> that has format \"<encryption>:<value>\".\n";
+	std::cout << "                                            There are several values available for <encryption>:\n";
+	std::cout << "                                            * plain:<value>      Defines the API key as plain text in <value>.\n";
 	std::cout << "\n";
 	std::cout << "  -B, --basic-auth       <user> <pw>        Defines a password for a user <user> used if basic-authentication is used over https.\n";
 	std::cout << "                                            The password is specified in <pw> that has format \"<encryption>:<value>\".\n";
@@ -129,13 +107,13 @@ Config::Config(esl::object::Context& aContext, Procedure::Settings& aSettings, i
 			addCertificate(i+1 < argc ? argv[i+1] : nullptr, i+2 < argc ? argv[i+2] : nullptr, i+3 < argc ? argv[i+3] : nullptr);
 			i = i+3;
 		}
-		else if(currentArg == "-A"  || currentArg == "--api-key") {
-			addApiKey(i+1 < argc ? argv[i+1] : nullptr, i+2 < argc ? argv[i+2] : nullptr, i+3 < argc ? argv[i+3] : nullptr);
-			i = i+3;
-		}
 		else if(currentArg == "-U"  || currentArg == "--user") {
 			addUser(i+1 < argc ? argv[i+1] : nullptr, i+2 < argc ? argv[i+2] : nullptr, i+3 < argc ? argv[i+3] : nullptr);
 			i = i+3;
+		}
+		else if(currentArg == "-A"  || currentArg == "--api-key") {
+			addApiKey(i+1 < argc ? argv[i+1] : nullptr, i+2 < argc ? argv[i+2] : nullptr);
+			i = i+2;
 		}
 		else if(currentArg == "-B"  || currentArg == "--basic-auth") {
 			addBasicAuth(i+1 < argc ? argv[i+1] : nullptr, i+2 < argc ? argv[i+2] : nullptr);
@@ -275,23 +253,42 @@ void Config::addCertificate(const char* hostName, const char* keyFile, const cha
 	keyStore->addPrivateKey(hostName, key, "");
 }
 
-void Config::addApiKey(const char* apik, const char* namespaceId, const char* roleStr) {
-	if(!apik) {
+void Config::addApiKey(const char* user, const char* apikey) {
+	if(!user) {
+		throw ArgumentsException("User name missing of option \"--basic-auth\".");
+	}
+
+	if(!apikey) {
 		throw ArgumentsException("API key missing of option \"--api-key\".");
 	}
 
-	if(!namespaceId) {
-		throw ArgumentsException("Namespace missing of option \"--api-key\".");
+	std::string apik = apikey;
+	if(apik.substr(0, 6) == "plain:") {
+		settings.userByPlainApiKey[apik.substr(6)] = user;
+	}
+	else {
+	//if(userData.pw.empty()) {
+		throw ArgumentsException("Invalid value \"" + apik + "\" for api-key of option \"--api-key\".");
+	}
+}
+
+void Config::addBasicAuth(const char* user, const char* password) {
+	if(!user) {
+		throw ArgumentsException("User name missing of option \"--basic-auth\".");
 	}
 
-	if(!roleStr) {
-		throw ArgumentsException("Role missing of option \"--api-key\".");
+	if(!password) {
+		throw ArgumentsException("Password missing of option \"--basic-auth\".");
 	}
 
+	std::string pw = password;
+	if(pw.substr(0, 6) == "plain:") {
+		settings.plainBasicAuthByUser[user] = pw.substr(6);
+	}
 
-	auto& apiKeyData = settings.apiKeys[apik];
-	apiKeyData.apiKey = apik;
-	apiKeyData.rolesByNamespace[namespaceId].insert(toRole(roleStr));
+	if(settings.plainBasicAuthByUser[user].empty()) {
+		throw ArgumentsException("Invalid value \"" + pw + "\" for password of option \"--basic-auth\".");
+	}
 }
 
 void Config::addUser(const char* user, const char* namespaceId, const char* roleStr) {
@@ -308,32 +305,7 @@ void Config::addUser(const char* user, const char* namespaceId, const char* role
 	}
 
 	auto& userData = settings.users[user];
-	userData.userName = user;
-	userData.rolesByNamespace[namespaceId].insert(toRole(roleStr));
-}
-
-void Config::addBasicAuth(const char* user, const char* password) {
-	if(!user) {
-		throw ArgumentsException("User name missing of option \"--basic-auth\".");
-	}
-
-	if(!password) {
-		throw ArgumentsException("Password missing of option \"--basic-auth\".");
-	}
-
-	auto& userData = settings.users[user];
-	userData.userName = user;
-	if(!userData.pw.empty()) {
-		throw ArgumentsException("Cannot specify user \"" + userData.userName + "\" of option \"--basic-auth\" twice.");
-	}
-	userData.pw = password;
-	if(userData.pw.substr(0, 6) == "plain:") {
-		userData.pw = userData.pw.substr(6);
-	}
-	else {
-	//if(userData.pw.empty()) {
-		throw ArgumentsException("Invalid value \"" + userData.pw + "\" for password of option \"--basic-auth\".");
-	}
+	userData.rolesByNamespace[namespaceId].insert(common::auth::UserData::toRole(roleStr));
 }
 
 void Config::addDatabase(const char* implementation) {

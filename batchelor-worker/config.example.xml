@@ -15,7 +15,8 @@
     </connection-->
     
     <metric key="OS" value="zLinux"/>
-    <metric key="CLOUD_ID" value="REWE-OnPrem|REWE-GCP"/>
+    <metric key="CLOUD_ID" value="GCP"/>
+    <!--metric key="CLOUD_ID" value="OnPrem"/-->
     <metric key="TASKS" value="3"/>
     
     <event id="batch-1" type="exec">
@@ -33,11 +34,8 @@
     </event>
     
     <!--event id="batch-2" type="exec">
-        <setting key="metrics-policy" value="allow|deny"/>
-        <setting key="metric" value="TASK_ID"/>
-        <setting key="metric" value="CLOUD_ID"/>
+        <setting key="resource-required.TASKS" value="1"/>
         
-        <setting key="maximum-tasks-running" value="3"/>
         <setting key="args" value="--propertyId=Bla --propertyFile=/wxx/secret/property.cfg"/>
         <setting key="args-flag" value="override|extend|fixed"/>
         <setting key="env" value="JOBID=${TASK_ID}"/>

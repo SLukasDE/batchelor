@@ -1,6 +1,6 @@
 /*
  * This file is part of Batchelor.
- * Copyright (C) 2023 Sven Lukas
+ * Copyright (C) 2023-2024 Sven Lukas
  *
  * Batchelor is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -16,10 +16,11 @@
  * License along with Batchelor.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <batchelor/common/auth/RequestHandler.h>
+
 #include <batchelor/head/Logger.h>
 #include <batchelor/head/Procedure.h>
-#include <batchelor/head/requesthandler/Auth.h>
-#include <batchelor/head/requesthandler/Engine.h>
+#include <batchelor/head/RequestHandler.h>
 
 #include <esl/com/http/server/MHDSocket.h>
 #include <esl/com/http/server/RequestContext.h>
@@ -31,35 +32,36 @@
 #include <esl/system/Stacktrace.h>
 
 #include <stdexcept>
+#include <utility>
 
 namespace batchelor {
 namespace head {
 namespace {
 Logger logger("batchelor::head::Procedure");
 
-class RequestHandler : public esl::com::http::server::RequestHandler, public esl::object::InitializeContext {
+class MyRequestHandler : public esl::com::http::server::RequestHandler, public esl::object::InitializeContext {
 public:
-	RequestHandler(const Procedure::Settings& settings);
+	MyRequestHandler(const Procedure::Settings& settings);
 
 	void initializeContext(esl::object::Context& context) override;
 
 	esl::io::Input accept(esl::com::http::server::RequestContext& requestContext) const override;
 
 private:
-	requesthandler::Auth requestHandlerAuth;
-	requesthandler::Engine requestHandlerEngine;
+	common::auth::RequestHandler requestHandlerAuth;
+	head::RequestHandler requestHandlerEngine;
 };
 
-RequestHandler::RequestHandler(const Procedure::Settings& settings)
-: requestHandlerAuth(requesthandler::Auth::Settings(settings)),
-  requestHandlerEngine(requesthandler::Engine::Settings(settings))
+MyRequestHandler::MyRequestHandler(const Procedure::Settings& settings)
+: requestHandlerAuth(common::auth::RequestHandler::Settings(settings.users, settings.userByPlainApiKey, settings.plainBasicAuthByUser)),
+  requestHandlerEngine(head::RequestHandler::Settings(settings))
 { }
 
-void RequestHandler::initializeContext(esl::object::Context& context) {
+void MyRequestHandler::initializeContext(esl::object::Context& context) {
 	requestHandlerEngine.initializeContext(context);
 }
 
-esl::io::Input RequestHandler::accept(esl::com::http::server::RequestContext& requestContext) const {
+esl::io::Input MyRequestHandler::accept(esl::com::http::server::RequestContext& requestContext) const {
 	auto rv = requestHandlerAuth.accept(requestContext);
 	if(rv) {
 		return rv;
@@ -68,7 +70,7 @@ esl::io::Input RequestHandler::accept(esl::com::http::server::RequestContext& re
 }
 
 std::unique_ptr<esl::com::http::server::RequestHandler> createRequestHandler(esl::object::Context& context, const Procedure::Settings& settings) {
-	std::unique_ptr<RequestHandler> requestHandler(new RequestHandler(settings));
+	std::unique_ptr<MyRequestHandler> requestHandler(new MyRequestHandler(settings));
 	requestHandler->initializeContext(context);
 	return std::unique_ptr<esl::com::http::server::RequestHandler>(requestHandler.release());
 }

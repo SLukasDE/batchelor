@@ -1,6 +1,25 @@
+/*
+ * This file is part of Batchelor.
+ * Copyright (C) 2023-2024 Sven Lukas
+ *
+ * Batchelor is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Batchelor is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public
+ * License along with Batchelor.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #ifndef BATCHELOR_UI_REQUESTHANDLER_H_
 #define BATCHELOR_UI_REQUESTHANDLER_H_
 
+#include <batchelor/common/auth/UserData.h>
 #include <batchelor/common/plugin/ConnectionFactory.h>
 
 #include <batchelor/service/Service.h>
@@ -51,11 +70,12 @@ private:
 		std::vector<std::pair<std::string, std::reference_wrapper<common::plugin::ConnectionFactory>>> connectionFactories;
 	};
 
-	esl::io::Input responseShowTask(esl::com::http::server::RequestContext& requestContext, service::Service& service, const std::string& taskId) const;
-	esl::io::Input responseShowTasks(esl::com::http::server::RequestContext& requestContext, service::Service& service) const;
-	esl::io::Input responseSendEvent(esl::com::http::server::RequestContext& requestContext, service::Service& service, const std::string& eventType) const;
-	esl::io::Input responseShowEventTypes(esl::com::http::server::RequestContext& requestContext, service::Service& service) const;
-	esl::io::Input responseMainPage(esl::com::http::server::RequestContext& requestContext) const;
+	esl::io::Input responseShowTask(esl::com::http::server::RequestContext& requestContext, service::Service& service, const std::set<common::auth::UserData::Role>& roles, const std::string& taskId) const;
+	esl::io::Input responseShowTasks(esl::com::http::server::RequestContext& requestContext, service::Service& service, const std::set<common::auth::UserData::Role>& roles) const;
+	esl::io::Input responseSendEvent(esl::com::http::server::RequestContext& requestContext, service::Service& service, const std::set<common::auth::UserData::Role>& roles, const std::string& eventType) const;
+	esl::io::Input responseSendSignal(esl::com::http::server::RequestContext& requestContext, service::Service& service, const std::set<common::auth::UserData::Role>& roles) const;
+	esl::io::Input responseShowEventTypes(esl::com::http::server::RequestContext& requestContext, service::Service& service, const std::set<common::auth::UserData::Role>& roles) const;
+	esl::io::Input responseMainPage(esl::com::http::server::RequestContext& requestContext, const std::set<common::auth::UserData::Role>& roles) const;
 
 	const Settings settings;
 	std::unique_ptr<InitializedSettings> initializedSettings;

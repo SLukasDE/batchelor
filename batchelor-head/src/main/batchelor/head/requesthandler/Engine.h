@@ -1,6 +1,7 @@
+#if 0
 /*
  * This file is part of Batchelor.
- * Copyright (C) 2023 Sven Lukas
+ * Copyright (C) 2023-2024 Sven Lukas
  *
  * Batchelor is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -79,6 +80,10 @@ public:
 
 private:
 	struct InitializedSettings {
+	private:
+		std::unique_ptr<esl::database::ConnectionFactory> dbConnectionFactoryPtr;
+
+	public:
 		InitializedSettings(esl::object::Context& context, const Settings& settings);
 
 		esl::database::ConnectionFactory& dbConnectionFactory;
@@ -103,3 +108,4 @@ private:
 } /* namespace batchelor */
 
 #endif /* BATCHELOR_HEAD_REQUESTHANDLER_ENGINE_H_ */
+#endif

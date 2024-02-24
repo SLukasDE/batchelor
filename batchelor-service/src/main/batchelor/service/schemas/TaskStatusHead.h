@@ -1,6 +1,6 @@
 /*
  * This file is part of Batchelor.
- * Copyright (C) 2023 Sven Lukas
+ * Copyright (C) 2023-2024 Sven Lukas
  *
  * Batchelor is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -60,6 +60,8 @@ struct TaskStatusHead {
 	 */
 	std::string state;
 
+	std::string condition;
+
 	int returnCode;
 	std::string message; // e.g. exception message
 
@@ -73,6 +75,7 @@ SERGUT_FUNCTION(TaskStatusHead, data, ar) {
     ar & SERGUT_MMEMBER(data, runConfiguration)
 //       & SERGUT_NESTED_MMEMBER(data, metrics, metric)
        & SERGUT_MMEMBER(data, state)
+       & SERGUT_MMEMBER(data, condition)
        & SERGUT_MMEMBER(data, returnCode)
        & SERGUT_MMEMBER(data, message)
        & SERGUT_MMEMBER(data, tsCreated)

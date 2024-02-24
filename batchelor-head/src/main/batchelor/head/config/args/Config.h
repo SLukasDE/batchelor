@@ -1,6 +1,6 @@
 /*
  * This file is part of Batchelor.
- * Copyright (C) 2023 Sven Lukas
+ * Copyright (C) 2023-2024 Sven Lukas
  *
  * Batchelor is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -72,9 +72,9 @@ private:
 
 	void addSetting(const char* key, const char* value);
 	void addCertificate(const char* hostName, const char* keyFile, const char* certFile);
-	void addApiKey(const char* apik, const char* namespaceId, const char* role);
-	void addUser(const char* user, const char* namespaceId, const char* role);
+	void addApiKey(const char* user, const char* apik);
 	void addBasicAuth(const char* user, const char* password);
+	void addUser(const char* user, const char* namespaceId, const char* role);
 	void addDatabase(const char* implementation);
 	void addObserver(const char* implementation);
 	void addSocket(const char* implementation);

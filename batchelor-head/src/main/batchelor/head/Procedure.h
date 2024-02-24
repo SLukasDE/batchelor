@@ -1,6 +1,6 @@
 /*
  * This file is part of Batchelor.
- * Copyright (C) 2023 Sven Lukas
+ * Copyright (C) 2023-2024 Sven Lukas
  *
  * Batchelor is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -19,6 +19,7 @@
 #ifndef BATCHELOR_HEAD_PROCEDURE_H_
 #define BATCHELOR_HEAD_PROCEDURE_H_
 
+#include <batchelor/common/auth/UserData.h>
 #include <batchelor/common/Procedure.h>
 #include <batchelor/common/plugin/Socket.h>
 
@@ -35,7 +36,6 @@
 #include <mutex>
 #include <set>
 #include <string>
-#include <utility>
 #include <vector>
 
 namespace batchelor {
@@ -46,28 +46,10 @@ public:
 	struct Settings {
 		Settings() = default;
 
-		enum class Role {
-			readOnly,
-			execute,
-			worker
-		};
+		std::map<std::string, common::auth::UserData> users;
 
-		struct UserData {
-			std::string userName;
-			std::string pw;
-			std::map<std::string, std::set<Role>> rolesByNamespace;
-		};
-
-		std::map<std::string, UserData> users;
-
-		struct APIKeyData {
-			std::string apiKey;
-			std::map<std::string, std::set<Role>> rolesByNamespace;
-		};
-
-		std::map<std::string, APIKeyData> apiKeys;
-
-		std::map<std::string, std::pair<std::string, std::string>> certFilesByHostname;
+		std::map<std::string, std::string> userByPlainApiKey;
+		std::map<std::string, std::string> plainBasicAuthByUser;
 
 		// after how many seconds do we handle a task or worker as zombie?
 		std::chrono::seconds timeoutZombie = std::chrono::minutes(5);

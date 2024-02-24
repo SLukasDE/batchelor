@@ -1,6 +1,6 @@
 /*
  * This file is part of Batchelor.
- * Copyright (C) 2023 Sven Lukas
+ * Copyright (C) 2023-2024 Sven Lukas
  *
  * Batchelor is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -63,7 +63,7 @@ public:
 private:
 	esl::database::Connection& getDBConnection() const;
 	Dao& getDao() const;
-	std::set<Procedure::Settings::Role> getRoles(const std::string& namespaceId);
+//	std::set<Procedure::Settings::Role> getRoles(const std::string& namespaceId);
 
 	const esl::object::Context& context;
 	Engine& engine;

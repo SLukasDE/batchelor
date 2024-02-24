@@ -1,3 +1,23 @@
+/*
+ * This file is part of Batchelor.
+ * Copyright (C) 2023-2024 Sven Lukas
+ *
+ * Batchelor is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Batchelor is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public
+ * License along with Batchelor.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+#include <batchelor/common/auth/UserData.h>
+
 #include <batchelor/service/schemas/RunRequest.h>
 #include <batchelor/service/schemas/RunResponse.h>
 #include <batchelor/service/schemas/TaskStatusHead.h>
@@ -18,8 +38,10 @@
 #include <esl/utility/MIME.h>
 #include <esl/utility/String.h>
 
-#include <iostream>
+#include <algorithm>
 #include <stdexcept>
+
+//#define USE_API_KEY_IN_HTML
 
 namespace batchelor {
 namespace ui {
@@ -27,25 +49,57 @@ namespace {
 Logger logger("batchelor::ui::RequestHandler");
 
 const std::string htmlHeader =
-		"<!DOCTYPE html>\n"
-		"<html>\n"
-		"  <head>\n"
-		"    <meta charset=\"utf-8\">\n"
-		"    <title>Batchelor UI</title>\n"
-		"    <!-- Bootstrap CSS einbinden -->\n"
-		"    <link rel=\"stylesheet\" href=\"https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css\">\n"
-		"  </head>\n"
-		"  <body>\n"
-		"    <div class=\"container\">\n";
+R"V0G0N(<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Batchelor UI</title>
+    <!-- Bootstrap CSS einbinden -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css">
+  </head>
+  <body>
+    <div class="container">
+)V0G0N";
 
+#ifdef USE_API_KEY_IN_HTML
 const std::string htmlFooter =
-		"  </div>\n"
-		"  \n"
-		"  <!-- Bootstrap JS einbinden -->\n"
-		"  <script src=\"https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js\"></script>\n"
-		"  </body>\n"
-		"</html>\n";
+R"V0G0N(    </div>
 
+    <script>
+      function fetchResource(event, token) {
+        event.preventDefault(); // Verhindert das Standardverhalten des Links
+        const url = event.target.href;
+        const headers = new Headers();
+      
+        headers.append('Authorization', `Bearer ${token}`);
+      
+        fetch(url, { method: 'GET', headers })
+          .then(response => response.text())
+          .then(data => document.write(data))
+          .catch(error => console.error('Fehler beim Abrufen der Ressource:', error));
+      }
+    </script>
+    <!-- Bootstrap JS einbinden -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+  </body>
+</html>
+)V0G0N";
+#else
+const std::string htmlFooter =
+R"V0G0N(    </div>
+
+    <!-- Bootstrap JS einbinden -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+  </body>
+</html>
+)V0G0N";
+#endif
+
+/*
+.then(response => response.json())
+.then(data => console.log(data))
+ */
 
 class InputHandler : public esl::io::input::String {
 public:
@@ -83,16 +137,19 @@ public:
 
 		std::vector<std::string> formsData = esl::utility::String::split(str, '&', true);
 		for(const auto& formData : formsData) {
+			// Todo: better find first occurrence of '=' ans split manualy into 2 parts at this point
 			std::vector<std::string> keyValue = esl::utility::String::split(formData, '=', true);
-			if(keyValue.size() == 1) {
-				rv.emplace_back(keyValue[0], "");
+			if(keyValue.size() > 2) {
+				logger.error << "Bad form data: \"" << formData << "\": " << keyValue.size() << "\n";
 			}
-			else if(keyValue.size() == 2) {
-				rv.emplace_back(keyValue[0], keyValue[1]);
-			}
-			else {
-				std::cout << "\"" << formData << "\": " << keyValue.size() << "\n";
-			}
+
+			std::string key = esl::utility::String::fromURLEncoded(keyValue[0]);
+			std::replace(key.begin(), key.end(), '+', ' ');
+
+			std::string value = keyValue.size() == 1 ? "" : esl::utility::String::fromURLEncoded(keyValue[1]);
+			std::replace(value.begin(), value.end(), '+', ' ');
+
+			rv.emplace_back(key, value);
 		}
 
 		return rv;
@@ -122,11 +179,11 @@ public:
 				else if(keyValue.first.substr(0, 14) == "setting_value_") {
 					settings[std::stoi(keyValue.first.substr(14))].second = keyValue.second;
 				}
-				else if(keyValue.first.substr(0, 12) == "metrics_key_") {
-					metrics[std::stoi(keyValue.first.substr(12))].first = keyValue.second;
+				else if(keyValue.first.substr(0, 11) == "metric_key_") {
+					metrics[std::stoi(keyValue.first.substr(11))].first = keyValue.second;
 				}
-				else if(keyValue.first.substr(0, 14) == "metrics_value_") {
-					metrics[std::stoi(keyValue.first.substr(14))].second = keyValue.second;
+				else if(keyValue.first.substr(0, 13) == "metric_value_") {
+					metrics[std::stoi(keyValue.first.substr(13))].second = keyValue.second;
 				}
 			}
 
@@ -156,6 +213,47 @@ public:
 				"      <tr>\n"
 				"        <th align=left>Message</th>\n"
 				"        <td align=left>" + runResponse.message + "</td>\n"
+				"      </tr>\n"
+				"    </table>\n"
+		        + htmlFooter;
+		esl::io::Output output = esl::io::output::String::create(std::move(responseContent));
+		requestContext.getConnection().send(response, std::move(output));
+	}
+
+	// POST: "/send-signal"
+	void process_2() {
+		std::string taskId;
+		std::string signal = "CANCEL";
+
+		{
+			std::vector<std::pair<std::string, std::string>> keyValues = parseFormData(getString());
+			for(const auto& keyValue : keyValues) {
+				if(keyValue.first == "taskId") {
+					taskId = keyValue.second;
+				}
+				else if(keyValue.first == "signal") {
+					signal = keyValue.second;
+				}
+			}
+		}
+
+		service->sendSignal(namespaceId, taskId, signal);
+
+		esl::com::http::server::Response response(200, esl::utility::MIME::Type::textHtml);
+		//response.addHeader("Location:", "./show-task/" + taskId);
+
+		std::string responseContent;
+		responseContent +=  htmlHeader +
+				"<a href=\"..\">Home</a>\n"
+				"    <h1>Signal sent</h1>\n"
+				"    <table class=\"table table-striped table-material\">\n"
+				"      <tr>\n"
+				"        <th align=left>Task ID</th>\n"
+				"        <td align=left><a href=\"./show-task/" + taskId + "\">" + taskId + "</a></td>\n"
+				"      </tr>\n"
+				"      <tr>\n"
+				"        <th align=left>Signal</th>\n"
+				"        <td align=left>" + signal + "</td>\n"
 				"      </tr>\n"
 				"    </table>\n"
 		        + htmlFooter;
@@ -223,38 +321,44 @@ esl::io::Input RequestHandler::accept(esl::com::http::server::RequestContext& re
 	//Service client(*this);
 
 	std::vector<std::string> pathList =  esl::utility::String::split(esl::utility::String::trim(requestContext.getPath(), '/'), '/', false);
+	auto roles = common::auth::UserData::getRoles(requestContext.getObjectContext(), settings.namespaceId);
 
 	// GET: "/show-task/{taskId}"
 	if(pathList.size() == 2 && pathList[0] == "show-task"
 	&& requestContext.getRequest().getMethod() == esl::utility::HttpMethod::toString(esl::utility::HttpMethod::Type::httpGet)) {
-		return responseShowTask(requestContext, *client, pathList[1]);
+		return responseShowTask(requestContext, *client, roles, pathList[1]);
 	}
 	// GET: "/show-tasks[?state={state}][&eventNotAfter={eventNotAfter}][&eventNotBefore={eventNotBefore}]"
 	else if(pathList.size() == 1 && pathList[0] == "show-tasks"
 	&& requestContext.getRequest().getMethod() == esl::utility::HttpMethod::toString(esl::utility::HttpMethod::Type::httpGet)) {
-		return responseShowTasks(requestContext, *client);
+		return responseShowTasks(requestContext, *client, roles);
 	}
 	// GET: "/send-event[?eventType={event-type}]"
-	if(pathList.size() == 1 && pathList[0] == "send-event"
+	else if(pathList.size() == 1 && pathList[0] == "send-event"
 	&& requestContext.getRequest().getMethod() == esl::utility::HttpMethod::toString(esl::utility::HttpMethod::Type::httpGet)) {
-		return responseSendEvent(requestContext, *client, requestContext.getRequest().hasArgument("eventType") ? requestContext.getRequest().getArgument("eventType") : "");
+		return responseSendEvent(requestContext, *client, roles, requestContext.getRequest().hasArgument("eventType") ? requestContext.getRequest().getArgument("eventType") : "");
 	}
 	// POST: "/send-event"
-	if(pathList.size() == 1 && pathList[0] == "send-event"
+	else if(pathList.size() == 1 && pathList[0] == "send-event"
 	&& requestContext.getRequest().getMethod() == esl::utility::HttpMethod::toString(esl::utility::HttpMethod::Type::httpPost)) {
 		std::unique_ptr<esl::io::Writer> writer(new InputHandler(requestContext, std::move(client), settings.namespaceId, &InputHandler::process_1));
 		return esl::io::Input(std::move(writer));
-		//return responseSendEventTypePost(requestContext, client, requestContext.getRequest().hasArgument("eventType") ? requestContext.getRequest().getArgument("eventType") : "");
+	}
+	// POST: "/send-signal"
+	if(pathList.size() == 1 && pathList[0] == "send-signal"
+	&& requestContext.getRequest().getMethod() == esl::utility::HttpMethod::toString(esl::utility::HttpMethod::Type::httpPost)) {
+		std::unique_ptr<esl::io::Writer> writer(new InputHandler(requestContext, std::move(client), settings.namespaceId, &InputHandler::process_2));
+		return esl::io::Input(std::move(writer));
 	}
 	// GET: "/show-event-types"
 	else if(pathList.size() == 1 && pathList[0] == "show-event-types"
 	&& requestContext.getRequest().getMethod() == esl::utility::HttpMethod::toString(esl::utility::HttpMethod::Type::httpGet)) {
-		return responseShowEventTypes(requestContext, *client);
+		return responseShowEventTypes(requestContext, *client, roles);
 	}
 	// GET: "/"
 	else if((pathList.size() == 0 || (pathList.size() == 1 && pathList[0] == ""))
 	&& requestContext.getRequest().getMethod() == esl::utility::HttpMethod::toString(esl::utility::HttpMethod::Type::httpGet)) {
-		return responseMainPage(requestContext);
+		return responseMainPage(requestContext, roles);
 	}
 	else {
 		std::string str;
@@ -273,12 +377,6 @@ esl::io::Input RequestHandler::accept(esl::com::http::server::RequestContext& re
 		esl::io::Output output = esl::io::output::String::create(str);
 		esl::com::http::server::Response response(404, esl::utility::MIME::Type::textHtml);
 		requestContext.getConnection().send(response, std::move(output));
-
-		std::cout << "path: \"" << requestContext.getPath() << "\"\n";
-		std::cout << "size: " << pathList.size() << "\n";
-		for(std::size_t i=0; i< pathList.size(); ++i) {
-			std::cout << "- \"" << pathList[i] << "\"\n";
-		}
 
 		return esl::io::input::Closed::create();
 	}
@@ -305,7 +403,11 @@ std::unique_ptr<esl::com::http::client::Connection> RequestHandler::createHTTPCo
 	return httpConnection;
 }
 
-esl::io::Input RequestHandler::responseShowTask(esl::com::http::server::RequestContext& requestContext, service::Service& service, const std::string& taskId) const {
+esl::io::Input RequestHandler::responseShowTask(esl::com::http::server::RequestContext& requestContext, service::Service& service, const std::set<common::auth::UserData::Role>& roles, const std::string& taskId) const {
+	if(roles.count(common::auth::UserData::Role::readOnly) == 0 && roles.count(common::auth::UserData::Role::execute) == 0) {
+		throw esl::com::http::server::exception::StatusCode(401);
+	}
+
 	std::unique_ptr<service::schemas::TaskStatusHead> tasksStatus;
 	try {
 		tasksStatus = service.getTask(settings.namespaceId, taskId);
@@ -317,6 +419,7 @@ esl::io::Input RequestHandler::responseShowTask(esl::com::http::server::RequestC
 	if(tasksStatus) {
 		str +=  htmlHeader +
 				"<a href=\"..\">Home</a>\n"
+				"    <form method=\"post\" action=\"../send-signal\">\n"
 				"    <h1>Task</h1>\n"
 				"    <table class=\"table table-striped table-material\">\n"
 				"      <tr>\n"
@@ -326,6 +429,10 @@ esl::io::Input RequestHandler::responseShowTask(esl::com::http::server::RequestC
 				"      <tr>\n"
 				"        <th align=left>Event</th>\n"
 				"        <td align=left>" + tasksStatus->runConfiguration.eventType + "</td>\n"
+				"      </tr>\n"
+				"      <tr>\n"
+				"        <th align=left>Condition</th>\n"
+				"        <td align=left>" + tasksStatus->condition + "</td>\n"
 				"      </tr>\n"
 				"      <tr>\n"
 				"        <th align=left>Status</th>\n"
@@ -385,7 +492,31 @@ esl::io::Input RequestHandler::responseShowTask(esl::com::http::server::RequestC
 					"      </tr>\n";
 		}
 		str +=
-				"    </table>\n"
+				"    </table>\n";
+
+		if(roles.count(common::auth::UserData::Role::execute) && (tasksStatus->state == "running" || tasksStatus->state == "queued")) {
+			if(tasksStatus->state == "running") {
+				str +=
+						"    <p>\n"
+						"    <hr>\n"
+						"    <h4>Signal</h4>\n"
+						"    <input type=\"text\" name=\"signal\" class=\"form-control\" placeholder=\"signal\" value=\"CANCEL\">\n"
+						"    <p>\n"
+						"    <hr>\n"
+						"    <input type=\"hidden\" name=\"taskId\" value=\"" + taskId + "\">\n"
+						"    <button class=\"btn btn-danger\" type=\"submit\">Send signal</button>\n";
+			}
+			else if(tasksStatus->state == "queued") {
+				str +=
+						"    <p>\n"
+						"    <hr>\n"
+						"    <input type=\"hidden\" name=\"signal\" class=\"form-control\" placeholder=\"signal\" value=\"CANCEL\">\n"
+						"    <input type=\"hidden\" name=\"taskId\" value=\"" + taskId + "\">\n"
+						"    <button class=\"btn btn-danger\" type=\"submit\">Send cancel</button>\n";
+			}
+		}
+
+		str +=  "    </form>\n"
 		        + htmlFooter;
 
 		esl::io::Output output = esl::io::output::String::create(str);
@@ -406,7 +537,11 @@ esl::io::Input RequestHandler::responseShowTask(esl::com::http::server::RequestC
 	return esl::io::input::Closed::create();
 }
 
-esl::io::Input RequestHandler::responseShowTasks(esl::com::http::server::RequestContext& requestContext, service::Service& service) const {
+esl::io::Input RequestHandler::responseShowTasks(esl::com::http::server::RequestContext& requestContext, service::Service& service, const std::set<common::auth::UserData::Role>& roles) const {
+	if(roles.count(common::auth::UserData::Role::readOnly) == 0 && roles.count(common::auth::UserData::Role::execute) == 0) {
+		throw esl::com::http::server::exception::StatusCode(401);
+	}
+
 	std::vector<service::schemas::TaskStatusHead> tasksStatus = service.getTasks(settings.namespaceId, ""/*state*/, ""/*eventNotAfter*/, ""/*eventNotBefore*/);
 	std::string str =
 			htmlHeader +
@@ -419,12 +554,6 @@ esl::io::Input RequestHandler::responseShowTasks(esl::com::http::server::Request
 			"        <th align=left>State</th>\n"
 			"        <th align=left>Return code</th>\n"
 			"        <th align=left>Message</th>\n"
-#if 0
-			"        <th align=left>Created TS</th>\n"
-			"        <th align=left>Running TS</th>\n"
-			"        <th align=left>Finished TS</th>\n"
-			"        <th align=left>Last heartbeat TS</th>\n"
-#endif
 			"      </tr>\n"
 			"      </thead>\n"
 			"      <tbody>\n";
@@ -436,12 +565,6 @@ esl::io::Input RequestHandler::responseShowTasks(esl::com::http::server::Request
 				"        <td align=left>" + taskStatus.state + "</td>\n"
 				"        <td align=left>" + std::to_string(taskStatus.returnCode) + "</td>\n"
 				"        <td align=left>" + taskStatus.message + "</td>\n"
-#if 0
-				"        <td align=left>" + taskStatus.tsCreated + "</td>\n"
-				"        <td align=left>" + taskStatus.tsRunning + "</td>\n"
-				"        <td align=left>" + taskStatus.tsFinished + "</td>\n"
-				"        <td align=left>" + taskStatus.tsLastHeartBeat + "</td>\n"
-#endif
 				"      </tr>\n";
 	}
 	str +=
@@ -455,21 +578,13 @@ esl::io::Input RequestHandler::responseShowTasks(esl::com::http::server::Request
 	return esl::io::input::Closed::create();
 }
 
-esl::io::Input RequestHandler::responseSendEvent(esl::com::http::server::RequestContext& requestContext, service::Service& service, const std::string& eventType) const {
-	std::string str;
-	str = R"V0G0N(
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<!-- Bootstrap CSS einbinden -->
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css">
-<title>Batchelor UI</title>
-</head>
+esl::io::Input RequestHandler::responseSendEvent(esl::com::http::server::RequestContext& requestContext, service::Service& service, const std::set<common::auth::UserData::Role>& roles, const std::string& eventType) const {
+	if(roles.count(common::auth::UserData::Role::execute) == 0) {
+		throw esl::com::http::server::exception::StatusCode(401);
+	}
 
-<body>
-<div class="container">
+	std::string str;
+	str =  htmlHeader + R"V0G0N(
 <a href="..">Home</a>
 <h1>Send event</h1>
 
@@ -516,12 +631,12 @@ esl::io::Input RequestHandler::responseSendEvent(esl::com::http::server::Request
   <p>
   
   <hr>
-  <button class="btn btn-success" type="submit">Formular absenden</button>
+  <button class="btn btn-success" type="submit">Event senden</button>
 </form>
 </div>
 
 <!-- Bootstrap JS -->
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
 
 <script>
     document.getElementById('addSetting').addEventListener('click', function() {
@@ -640,7 +755,11 @@ esl::io::Input RequestHandler::responseSendEvent(esl::com::http::server::Request
 	return esl::io::input::Closed::create();
 }
 
-esl::io::Input RequestHandler::responseShowEventTypes(esl::com::http::server::RequestContext& requestContext, service::Service& service) const {
+esl::io::Input RequestHandler::responseShowEventTypes(esl::com::http::server::RequestContext& requestContext, service::Service& service, const std::set<common::auth::UserData::Role>& roles) const {
+	if(roles.count(common::auth::UserData::Role::readOnly) == 0 && roles.count(common::auth::UserData::Role::execute) == 0) {
+		throw esl::com::http::server::exception::StatusCode(401);
+	}
+
 	std::vector<std::string> eventTypes = service.getEventTypes(settings.namespaceId);
 	std::string str =
 			htmlHeader +
@@ -652,11 +771,21 @@ esl::io::Input RequestHandler::responseShowEventTypes(esl::com::http::server::Re
 			"      </tr>\n"
 			"      </thead>\n"
 			"      <tbody>\n";
-	for(const auto& eventType : eventTypes) {
-		str +=
-				"      <tr>\n"
-				"        <td align=left><a href=\"./send-event?eventType=" + eventType + "\">" + eventType + "</a></td>\n"
-				"      </tr>\n";
+	if(roles.count(common::auth::UserData::Role::execute)) {
+		for(const auto& eventType : eventTypes) {
+			str +=
+					"      <tr>\n"
+					"        <td align=left><a href=\"./send-event?eventType=" + eventType + "\">" + eventType + "</a></td>\n"
+					"      </tr>\n";
+		}
+	}
+	else {
+		for(const auto& eventType : eventTypes) {
+			str +=
+					"      <tr>\n"
+					"        <td align=left>" + eventType + "</td>\n"
+					"      </tr>\n";
+		}
 	}
 	str +=
 			"    </tbody>\n"
@@ -669,8 +798,12 @@ esl::io::Input RequestHandler::responseShowEventTypes(esl::com::http::server::Re
 	return esl::io::input::Closed::create();
 }
 
-esl::io::Input RequestHandler::responseMainPage(esl::com::http::server::RequestContext& requestContext) const {
-	esl::com::http::server::Response response(404, esl::utility::MIME::Type::textHtml);
+esl::io::Input RequestHandler::responseMainPage(esl::com::http::server::RequestContext& requestContext, const std::set<common::auth::UserData::Role>& roles) const {
+	if(roles.count(common::auth::UserData::Role::readOnly) == 0 && roles.count(common::auth::UserData::Role::execute) == 0) {
+		throw esl::com::http::server::exception::StatusCode(401);
+	}
+
+	esl::com::http::server::Response response(200, esl::utility::MIME::Type::textHtml);
 	std::string str =
 			htmlHeader +
 			"    <table class=\"table table-striped table-material\">\n"
@@ -691,11 +824,22 @@ esl::io::Input RequestHandler::responseMainPage(esl::com::http::server::RequestC
 			"        <td align=left>shows detailed information of the specified tasks</td>\n"
 			"      </tr>\n"
 			"      <tr>\n"
+#ifdef USE_API_KEY_IN_HTML
+			"        <td align=left><a href=\"./show-event-types\" onclick=\"fetchResource(event, 'my-secret-token')\">show-event-types</a></td>\n"
+#else
 			"        <td align=left><a href=\"./show-event-types\">show-event-types</a></td>\n"
+#endif
 			"        <td align=left>shows all available event types of the head server</td>\n"
 			"      </tr>\n"
-			"      <tr>\n"
-			"        <td align=left><a href=\"./send-event\">send-event</a></td>\n"
+			"      <tr>\n";
+	if(roles.count(common::auth::UserData::Role::execute)) {
+		str += "        <td align=left><a href=\"./send-event\">send-event</a></td>\n";
+	}
+	else {
+		str += "        <td align=left>send-event</td>\n";
+	}
+
+	str +=
 			"        <td align=left>sends an event to the head server</td>\n"
 			"      </tr>\n"
 			"      </tbody>\n"

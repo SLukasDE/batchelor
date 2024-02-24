@@ -1,6 +1,6 @@
 /*
  * This file is part of Batchelor.
- * Copyright (C) 2023 Sven Lukas
+ * Copyright (C) 2023-2024 Sven Lukas
  *
  * Batchelor is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -158,7 +158,7 @@ void Procedure::sendEvent() {
 		for(const auto& metric : settings.metrics) {
 			runRequest.metrics.push_back(service::schemas::Setting::make(metric.first, metric.second));
 		}
-		runRequest.condition = settings.condition.empty() ? "${TRUE}" : settings.condition;
+		runRequest.condition = settings.condition;
 
 		runResponse = client.runTask(settings.namespaceId, runRequest);
 

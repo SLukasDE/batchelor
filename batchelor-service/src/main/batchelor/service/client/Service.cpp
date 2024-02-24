@@ -1,6 +1,6 @@
 /*
  * This file is part of Batchelor.
- * Copyright (C) 2023 Sven Lukas
+ * Copyright (C) 2023-2024 Sven Lukas
  *
  * Batchelor is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -61,7 +61,7 @@ void Service::alive() {
 schemas::FetchResponse Service::fetchTask(const std::string& namespaceId, const schemas::FetchRequest& fetchRequest) {
 	schemas::FetchResponse fetchResponse;
 
-	static const std::string serviceUrl = "fetch-task/" + namespaceId;
+	const std::string serviceUrl = "fetch-task/" + namespaceId;
     esl::com::http::client::Request request(serviceUrl, esl::utility::HttpMethod::Type::httpPost, esl::utility::MIME::Type::applicationJson);
     request.addHeader("Accept", esl::utility::MIME::toString(esl::utility::MIME::Type::applicationJson) + "," + esl::utility::MIME::toString(esl::utility::MIME::Type::applicationXml));
 
@@ -197,7 +197,7 @@ std::unique_ptr<schemas::TaskStatusHead> Service::getTask(const std::string& nam
 schemas::RunResponse Service::runTask(const std::string& namespaceId, const schemas::RunRequest& runRequest) {
 	schemas::RunResponse runResponse;
 
-	static const std::string serviceUrl = "task/" + namespaceId;
+	const std::string serviceUrl = "task/" + namespaceId;
 
 #if 0
     std::map<std::string, std::string> requestHeaders;
@@ -247,7 +247,7 @@ schemas::RunResponse Service::runTask(const std::string& namespaceId, const sche
 }
 
 void Service::sendSignal(const std::string& namespaceId, const std::string& taskId, const std::string& signal) {
-    static const std::string serviceUrl = "signal/" + namespaceId + "/" + taskId + "/" + signal;
+    const std::string serviceUrl = "signal/" + namespaceId + "/" + taskId + "/" + signal;
 
     esl::com::http::client::Request request(serviceUrl, esl::utility::HttpMethod::Type::httpPost, esl::utility::MIME::Type::applicationJson);
 

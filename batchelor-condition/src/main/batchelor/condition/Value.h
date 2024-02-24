@@ -1,7 +1,26 @@
+/*
+ * This file is part of Batchelor.
+ * Copyright (C) 2023-2024 Sven Lukas
+ *
+ * Batchelor is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Batchelor is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public
+ * License along with Batchelor.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #ifndef BATCHELOR_CONDITION_VALUE_H_
 #define BATCHELOR_CONDITION_VALUE_H_
 
 #include <batchelor/condition/FunctionType.h>
+#include <batchelor/condition/ObjectType.h>
 #include <batchelor/condition/ValueType.h>
 
 #include <string>
@@ -11,19 +30,16 @@ namespace batchelor {
 namespace condition {
 
 struct Value {
+	Value() = default;
+	Value(bool b);
+	Value(double number);
+	Value(const std::string& str);
+
 	ValueType getValueType() const;
-	//ValueType valueType = ValueType::vtVoid;
-	ValueType objectType = ValueType::vtVoid;
+	ObjectType objectType = ObjectType::otBool;
 
-	struct {
-		std::string name;
-		std::vector<Value> args;
-		FunctionType function;
-	} valueFunction;
-
-	struct {
-		std::string name;
-	} valueVariable;
+	FunctionType functionType;
+	std::vector<Value> args;
 
     double valueNumber = 0;
     std::string valueString;

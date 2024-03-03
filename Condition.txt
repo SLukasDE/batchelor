@@ -1,1 +1,1 @@
-((${CLOUD_ID} <> "REWE-GCP") || (${SECONDS_WAITING} >= 20))
+((${CLOUD_ID} <> "GCP") || (${SECONDS_WAITING} >= 20))

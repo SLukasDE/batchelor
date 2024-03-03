@@ -543,6 +543,10 @@ esl::io::Input RequestHandler::responseShowTasks(esl::com::http::server::Request
 	}
 
 	std::vector<service::schemas::TaskStatusHead> tasksStatus = service.getTasks(settings.namespaceId, ""/*state*/, ""/*eventNotAfter*/, ""/*eventNotBefore*/);
+	std::sort(tasksStatus.begin(), tasksStatus.end(), [](const service::schemas::TaskStatusHead& a, const service::schemas::TaskStatusHead& b)
+            {
+                return a.tsCreated > b.tsCreated;
+            });
 	std::string str =
 			htmlHeader +
 			"<a href=\"..\">Home</a>\n"

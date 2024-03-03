@@ -137,7 +137,7 @@ void Procedure::internalProcedureRun(esl::object::Context& context) {
 			break;
 		}
 		catch(const esl::com::http::client::exception::NetworkError& e) {
-	        std::cerr << "NetworkError occurred: " << e.what() << "\n";
+			logger.warn << "Network error: " << e.what() << "\n";
 			httpConnectionFactory = nullptr;
 		}
 	} while(firstConnectionFactory != nextConnectionFactory);

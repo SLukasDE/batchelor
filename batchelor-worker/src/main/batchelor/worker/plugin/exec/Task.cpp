@@ -30,8 +30,6 @@
 #include <esl/system/Signal.h>
 #include <esl/utility/String.h>
 
-#include <boost/filesystem.hpp>
-
 #include <cstdlib>
 #include <mutex>
 #include <stdexcept>
@@ -177,14 +175,14 @@ Task::Task(TaskFactory& aTaskFactoryExec, std::condition_variable& aNotifyCV, st
 	process->setWorkingDir(settings.cd);
 
 #if 0
-	(*process)[esl::system::FileDescriptor::getOut()] >> boost::filesystem::path(settings.cd + "/out.log");
-	(*process)[esl::system::FileDescriptor::getErr()] >> boost::filesystem::path(settings.cd + "/err.log");
+	(*process)[esl::system::FileDescriptor::getOut()] >> (settings.cd + "/out.log");
+	(*process)[esl::system::FileDescriptor::getErr()] >> (settings.cd + "/err.log");
 #else
 	if(!outfile.empty()) {
-		(*process)[esl::system::FileDescriptor::getOut()] >> boost::filesystem::path(outfile);
+		(*process)[esl::system::FileDescriptor::getOut()] >> outfile;
 	}
 	if(!errfile.empty()) {
-		(*process)[esl::system::FileDescriptor::getErr()] >> boost::filesystem::path(errfile);
+		(*process)[esl::system::FileDescriptor::getErr()] >> errfile;
 	}
 #endif
 

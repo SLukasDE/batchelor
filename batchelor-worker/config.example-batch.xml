@@ -1,0 +1,30 @@
+<batchelor>
+    <event id="batch-1" type="exec">
+        <setting key="resource-required.TASKS" value="1"/>
+        
+        <setting key="args" value="10"/>
+        <setting key="args-flag" value="fixed"/>
+        <setting key="env" value="JOBID=${TASK_ID}"/>
+        <setting key="env" value="TMP_DIR=/tmp"/>
+        <setting key="env-flag-global" value="extend"/>
+        <setting key="env-flag" value="fixed"/>
+        <setting key="cd" value="."/>
+        <setting key="cd-flag" value="fixed"/>
+        <setting key="cmd" value="/bin/sleep"/>
+    </event>
+
+    <event id="batch-2" type="exec">
+        <setting key="resource-required.TASKS" value="1"/>
+        
+        <setting key="args-flag" value="extend"/>
+        <setting key="args" value="batch-2.sh --JOB_ID=${TASK_ID}"/>
+        <setting key="env" value="JOB_ID=${TASK_ID}"/>
+        <setting key="env" value="CLOUD_ID=${CLOUD_ID}"/>
+        <setting key="env" value="TMP_DIR=/tmp"/>
+        <setting key="env-flag-global" value="extend"/>
+        <setting key="env-flag" value="fixed"/>
+        <setting key="cd" value="."/>
+        <setting key="cd-flag" value="fixed"/>
+        <setting key="cmd" value="/bin/bash"/>
+    </event>
+</batchelor>

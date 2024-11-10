@@ -1,63 +1,23 @@
-#include <batchelor/common/ArgumentsException.h>
+/*
+ * This file is part of Batchelor.
+ * Copyright (C) 2023-2024 Sven Lukas
+ *
+ * Batchelor is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Batchelor is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public
+ * License along with Batchelor.  If not, see <https://www.gnu.org/licenses/>.
+ */
 
-#include <batchelor/control/Logger.h>
 #include <batchelor/control/Main.h>
-#include <batchelor/control/Options.h>
-
-#include <esl/logging/Logging.h>
-#include <esl/plugin/Registry.h>
-#include <esl/plugin/exception/PluginNotFound.h>
-#include <esl/system/Stacktrace.h>
-
-#include <eslx/Plugin.h>
-
-#include <iostream>
-#include <stdexcept>
-
-batchelor::control::Logger logger("batchelor::control");
 
 int main(int argc, const char* argv[]) {
-	using namespace batchelor::control;
-	using namespace batchelor::common;
-
-	int rc = -1;
-
-	try {
-		Options options(argc, argv);
-
-		eslx::Plugin::install(esl::plugin::Registry::get(), nullptr);
-	    esl::system::Stacktrace::init("eslx/system/Stacktrace", {});
-		esl::logging::Logging::initWithFile("logger.xml");
-
-		Main main{ options };
-
-		rc = main.getReturnCode();
-	}
-    catch(const ArgumentsException& e) {
-    	std::cerr << e.what() << "\n";
-		Options::printUsage();
-    }
-    catch(const esl::plugin::exception::PluginNotFound& e) {
-        std::cerr << "Plugin not found exception occurred: " << e.what() << "\n";
-        const esl::plugin::Registry::BasePlugins& basePlugins = esl::plugin::Registry::get().getPlugins(e.getTypeIndex());
-        if(basePlugins.empty()) {
-            std::cerr << "No implementations available.\n";
-        }
-        else {
-            std::cerr << "Implementations available:\n";
-            for(const auto& basePlugin : basePlugins) {
-                std::cerr << "- " << basePlugin.first << "\n";
-            }
-        }
-    }
-    catch(const std::exception& e) {
-        std::cerr << "Exception occurred: " << e.what() << "\n";
-    }
-    catch(...) {
-        std::cerr << "Unknown exception occurred.\n";
-    }
-
-	esl::plugin::Registry::cleanup();
-
-	return rc;
+	return batchelor::control::Main(argc, argv).getReturnCode();
 }

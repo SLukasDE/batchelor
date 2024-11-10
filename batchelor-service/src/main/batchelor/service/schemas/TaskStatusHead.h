@@ -1,3 +1,21 @@
+/*
+ * This file is part of Batchelor.
+ * Copyright (C) 2023-2024 Sven Lukas
+ *
+ * Batchelor is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Batchelor is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public
+ * License along with Batchelor.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #ifndef BATCHELOR_SERVICE_SCHEMAS_TASKSTATUSHEAD_H_
 #define BATCHELOR_SERVICE_SCHEMAS_TASKSTATUSHEAD_H_
 
@@ -30,7 +48,7 @@ struct TaskStatusHead {
 	 * - priority,
 	 * - ...
 	 */
-	std::vector<Setting> metrics;
+//	std::vector<Setting> metrics;
 
 	/* possible values:
 	 * - waiting   // set by head   // new task has been created and is waiting to get into state running
@@ -41,6 +59,8 @@ struct TaskStatusHead {
 	 * - zombi     // set by head   // task was in state running but worker did not send heart beat for a while
 	 */
 	std::string state;
+
+	std::string condition;
 
 	int returnCode;
 	std::string message; // e.g. exception message
@@ -53,8 +73,9 @@ struct TaskStatusHead {
 
 SERGUT_FUNCTION(TaskStatusHead, data, ar) {
     ar & SERGUT_MMEMBER(data, runConfiguration)
-       & SERGUT_NESTED_MMEMBER(data, metrics, metric)
+//       & SERGUT_NESTED_MMEMBER(data, metrics, metric)
        & SERGUT_MMEMBER(data, state)
+       & SERGUT_MMEMBER(data, condition)
        & SERGUT_MMEMBER(data, returnCode)
        & SERGUT_MMEMBER(data, message)
        & SERGUT_MMEMBER(data, tsCreated)

@@ -1,5 +1,5 @@
 <esl-logger>
-	<layout id="standard" implementation="eslx/logging/DefaultLayout">
+	<layout id="standard" implementation="esl/monitoring/SimpleLayout">
 		<parameter key="show-timestamp" value="true"/>
 		<parameter key="show-level" value="true"/>
 		<parameter key="show-typename" value="true"/>
@@ -10,8 +10,7 @@
 		<parameter key="show-thread-no" value="false"/>
 	</layout>
 	
-	<!--appender implementation="eslx/OStream" layout="standard"-->
-	<appender implementation="eslx/logging/OStreamAppender" record="selected" layout="standard">
+	<appender implementation="esl/monitoring/OStreamAppender" record="selected" layout="standard">
 		<parameter key="trace" value="out"/>
 		<parameter key="debug" value="out"/>
 		<parameter key="info"  value="out"/>
@@ -19,12 +18,10 @@
 		<parameter key="error" value="out"/>
 	</appender>
 	
-	<appender implementation="eslx/logging/MemBufferAppender" record="all" layout="standard">
+	<appender implementation="esl/monitoring/MemBufferAppender" record="all" layout="standard">
 		<parameter key="max-lines" value="100"/>
 	</appender>
 	
-	<setting scope="eslx::test::*"                     level="trace"/>
-	<setting scope="esl::*"                            level="info"/>
-	<setting scope="jerry::engine::ProcessRegistry"    level="trace"/>
-	<setting scope="batchelor::worker::Procedure"      level="trace"/>
+	<setting scope="batchelor::*" level="trace"/>
+	<setting scope="esl::*"       level="info"/>
 </esl-logger>

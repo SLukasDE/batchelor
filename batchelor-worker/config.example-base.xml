@@ -1,0 +1,13 @@
+<batchelor>
+    <connection type="basic">
+        <setting key="url" value="http://localhost:8080"/>
+        <setting key="username" value="hans"/>
+        <setting key="password" value="wurst"/>
+    </connection>
+    
+    <setting key="maximum-tasks-running" value="3"/>
+    
+    <metric key="OS" value="zLinux"/>
+    <metric key="CLOUD_ID" value="GCP"/>
+    <!--metric key="CLOUD_ID" value="OnPrem"/-->
+</batchelor>

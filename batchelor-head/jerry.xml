@@ -1,23 +1,28 @@
-<context>
-	<library file="./build/batchelor-head/1.5.0/default/architecture/linux-gcc/link-dynamic/libbatchelor-head.so"/>
+<jerry>
+	<library file="./build/batchelor-head/0.0.1/default/architecture/linux-gcc/link-dynamic/libbatchelor-head.so"/>
 	
-	<database id="my-db" implementation="eslx/database/SQLiteConnectionFactory">
-		<!-- parameter key="URI" value="file:my.db?mode=rw"/ -->
-		<parameter key="URI" value="file:test?mode=memory"/>
-	</database>
-	
-	<http-server https="false">
-		<parameter key="threads" value="4"/>
+	<http-server implementation="esl/com/http/server/MHDSocket">
+		<parameter key="https" value="false"/>
 		<parameter key="port" value="8080"/>
+		<parameter key="threads" value="4"/>
 		
-		<context implementation="jerry4esl/http-host">
-			<parameter key="server-name" value="*"/>
-			<context>
-				<http-requesthandler implementation="batchelor-head">
-					<parameter key="db-connection-factory" value="my-db"/>
-				</http-requesthandler>
-			</context>
-		</context>
-	</http-server>
+		<!--database id="my-db" implementation="esl/database/SQLiteConnectionFactory">
+			<parameter key="URI" value="file:test?mode=memory"/>
+		</database-->
+		
+		<!--http-requesthandler implementation="jerry/log"/-->
+		<http-requesthandler implementation="batchelor-auth">
+			<parameter key="user"       value="hans:default:execute"/>
+			<parameter key="user"       value="worker:default:execute"/>
+			<parameter key="user"       value="worker:default:worker"/>
+			<parameter key="basic-auth" value="hans:plain:wurst"/>
+			<parameter key="api-key"    value="worker:plain:AXBS5"/>
+		</http-requesthandler>
 
-</context>
+		<http-requesthandler implementation="batchelor-head">
+			<!--parameter key="db-connection-factory" value="my-db"/-->
+			<parameter key="zombie-timeout" value="5 min"/>
+			<parameter key="cleanup-timeout" value="1h"/>
+		</http-requesthandler>
+	</http-server>
+</jerry>

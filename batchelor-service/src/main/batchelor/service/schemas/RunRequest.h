@@ -1,3 +1,21 @@
+/*
+ * This file is part of Batchelor.
+ * Copyright (C) 2023-2024 Sven Lukas
+ *
+ * Batchelor is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Batchelor is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public
+ * License along with Batchelor.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #ifndef BATCHELOR_SERVICE_SCHEMAS_RUNREQUEST_H_
 #define BATCHELOR_SERVICE_SCHEMAS_RUNREQUEST_H_
 
@@ -22,9 +40,11 @@ struct RunRequest {
 	 * e.g.:
 	 * - settings[0] = { 'env' ; 'DISPLAY=0' }
 	 * - settings[1] = { 'env' ; 'TMP_DIR=/tmp' }
-	 * - settings[2] = { 'args' ; '--propertyId=Bla --propertyFile=/wxx/secret/property.cfg' }
+	 * - settings[2] = { 'args' ; '--propertyId=Bla --propertyFile=/etc/secret/test.pwd' }
 	 */
 	std::vector<Setting> settings;
+
+	std::vector<Setting> metrics;
 
 	/* First this task will go into a queue and it's state is waiting.
 	 * Every time a worker is calling fetchTask, this formula will be evaluated if task is still in state waiting and if worker is offering this eventType.
@@ -49,6 +69,7 @@ SERGUT_FUNCTION(RunRequest, data, ar) {
     ar & SERGUT_MMEMBER(data, eventType)
        & SERGUT_MMEMBER(data, priority)
        & SERGUT_NESTED_MMEMBER(data, settings, settings)
+       & SERGUT_NESTED_MMEMBER(data, metrics, metrics)
        & SERGUT_MMEMBER(data, condition);
 }
 

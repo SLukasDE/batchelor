@@ -5,6 +5,17 @@ build
 .project
 .cproject
 .settings
+batchelor-common/.bash_history
+batchelor-control/.bash_history
+batchelor-head/.bash_history
+batchelor-worker/.bash_history
+batchelor-worker/err.log
+batchelor-worker/out.log
+batchelor-worker/.kube/
+batchelor-worker/kube/dev-level-1.yaml
+.bash_history
+batchelor-0.0.1-1.x86_64.rpm
+batchelor-worker/batchelor-worker-0.0.1-1.x86_64.rpm
 
 # Prerequisites
 *.d

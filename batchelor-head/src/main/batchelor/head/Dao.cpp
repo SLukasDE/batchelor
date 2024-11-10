@@ -1,3 +1,23 @@
+/*
+ * This file is part of Batchelor.
+ * Copyright (C) 2023-2024 Sven Lukas
+ *
+ * Batchelor is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Batchelor is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public
+ * License along with Batchelor.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+#include <batchelor/common/Timestamp.h>
+
 #include <batchelor/head/Dao.h>
 #include <batchelor/head/Logger.h>
 
@@ -8,6 +28,7 @@
 #include <date/date.h>
 
 #include <esl/database/PreparedStatement.h>
+#include <esl/database/ResultSet.h>
 #include <esl/system/Stacktrace.h>
 #include <esl/utility/String.h>
 
@@ -19,6 +40,7 @@
 
 namespace batchelor {
 namespace head {
+
 namespace {
 Logger logger("batchelor::head::Dao");
 
@@ -35,23 +57,6 @@ OType checkedNumericConvert(IType inputValue) {
         throw esl::system::Stacktrace::add(std::runtime_error("Numeric overflow in conversion"));
     }
     return static_cast<OType>(inputValue);
-}
-
-// ---------------------------------------------------------------------------------------------
-
-std::string toString(const std::chrono::system_clock::time_point& tp) {
-	return date::format("%F %T", tp);
-}
-
-std::chrono::system_clock::time_point toTimepoint(const std::string& tpStr) {
-	std::chrono::system_clock::time_point tp;
-
-	if(!tpStr.empty()) {
-		std::istringstream ss(tpStr);
-		date::from_stream(ss, "%F %T", tp);
-	}
-
-	return tp;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -87,23 +92,24 @@ std::vector<service::schemas::Setting> toSettings(const std::string& settings) {
 }
 
 unsigned int calculatedEffectivePriority(unsigned int priority, std::chrono::system_clock::time_point priorityTS) {
-	auto minutes = std::chrono::duration_cast<std::chrono::minutes>(std::chrono::system_clock::now()-priorityTS).count();
-	if(minutes >= 24) {
-		minutes = 24;
-		logger.info << "Minutes = " << minutes << "\n";
+	auto minutesWaiting = std::chrono::duration_cast<std::chrono::minutes>(std::chrono::system_clock::now()-priorityTS).count();
+	if(minutesWaiting >= 24) {
+		logger.info << "Minutes = " << minutesWaiting << "\n";
+		minutesWaiting = 24;
 	}
-	if(minutes < 0) {
-		logger.warn << "Minutes = " << minutes << "\n";
-		minutes = 0;
+	if(minutesWaiting < 0) {
+		logger.warn << "Minutes = " << minutesWaiting << "\n";
+		minutesWaiting = 0;
 	}
 
-	return priority + minutes;
+	return priority + minutesWaiting;
 }
 }
 
 Dao::Dao(esl::database::Connection& aDbConnection)
 : dbConnection(aDbConnection),
-  isSQLite(dbConnection.getImplementations().count("SQLite") > 0)
+  isSQLite(true)
+  //isSQLite(dbConnection.getImplementations().count("SQLite") > 0)
 {
 	if(isSQLite) {
 		dbConnection.prepare(
@@ -122,21 +128,33 @@ Dao::Dao(esl::database::Connection& aDbConnection)
             "END_TS TEXT, "
             "LAST_HEARTBEAT_TS INTEGER, "
             "STATE TEXT, "
-            "RETURN_CODE INTEGER, "
-            "MESSAGE TEXT);").execute();
+    	    "RETURN_CODE INTEGER, "
+    	    "MESSAGE TEXT);").execute();
+
+		dbConnection.prepare(
+			"CREATE TABLE IF NOT EXISTS AVAILABLE_EVENT_TYPES("
+		    "EVENT_TYPE TEXT, "
+    	    "LAST_HEARTBEAT_TS INTEGER);").execute();
+		/*
+		dbConnection.prepare(
+			"CREATE TABLE IF NOT EXISTS WORKER_METRICS("
+		    "WORKER_ID TEXT, "
+		    "SETTINGS BLOB, "
+    	    "LAST_HEARTBEAT_TS INTEGER);").execute();
+    	*/
 	}
 }
 
-void Dao::saveTask(const Task& task) {
-	if(insertTask(task)) {
+void Dao::saveTask(const std::string& namespaceId, const Task& task) {
+	if(insertTask(namespaceId, task)) {
 		return;
 	}
-	if(updateTask(task)) {
+	if(updateTask(namespaceId, task)) {
 		return;
 	}
 }
 
-bool Dao::insertTask(const Task& task) {
+bool Dao::insertTask(const std::string& namespaceId, const Task& task) {
 	static const std::string sqlStr = "INSERT INTO TASKS ("
 			"TASK_ID, "
 			"CRC32, "
@@ -172,8 +190,8 @@ bool Dao::insertTask(const Task& task) {
 		toString(task.metrics),
 		task.condition,
 		createdTSDuration,
-		toString(task.startTS),
-		toString(task.endTS),
+		common::Timestamp::toString(task.startTS),
+		common::Timestamp::toString(task.endTS),
 		createdTSDuration,
 		common::types::State::toString(task.state),
 		task.returnCode,
@@ -183,7 +201,7 @@ bool Dao::insertTask(const Task& task) {
     return true;
 }
 
-bool Dao::updateTask(const Task& task) {
+bool Dao::updateTask(const std::string& namespaceId, const Task& task) {
 	static const std::string sqlStr = "UPDATE TASKS SET "
 			"CRC32 = ?, "
 			"PRIORITY = ?, "
@@ -225,8 +243,8 @@ bool Dao::updateTask(const Task& task) {
 		signals,
 		task.condition,
 		lastCreatedTSDuration,
-		toString(task.startTS),
-		toString(task.endTS),
+		common::Timestamp::toString(task.startTS),
+		common::Timestamp::toString(task.endTS),
 		lastHeartbeatTSDuration,
 		common::types::State::toString(task.state),
 		task.returnCode,
@@ -237,10 +255,10 @@ bool Dao::updateTask(const Task& task) {
     return true;
 }
 
-std::vector<Dao::Task> Dao::loadTasks(const common::types::State::Type& state, const std::chrono::system_clock::time_point& eventNotAfterTS, const std::chrono::system_clock::time_point& eventNotBeforeTS) {
+std::vector<Dao::Task> Dao::loadTasks(const std::string& namespaceId, const std::string& stateStr, const std::chrono::system_clock::time_point& eventNotAfterTS, const std::chrono::system_clock::time_point& eventNotBeforeTS) {
     std::vector<Task> results;
 
-	static const std::string sqlStr = "SELECT "
+	static const std::string sqlStrWithState = "SELECT "
 			"TASK_ID, "
 			"CRC32, "
 			"PRIORITY, "
@@ -257,12 +275,33 @@ std::vector<Dao::Task> Dao::loadTasks(const common::types::State::Type& state, c
 			"RETURN_CODE, "
 			"MESSAGE "
 			"FROM TASKS "
-			"WHERE STATE = ? AND CREATED_TS >= ? AND CREATED_TS <= ?;";
-    esl::database::PreparedStatement statement = dbConnection.prepare(sqlStr);
-    std::int64_t eventNotAfter = std::chrono::time_point_cast<std::chrono::milliseconds>(eventNotAfterTS).time_since_epoch().count();
-    std::int64_t eventNotBefore = std::chrono::time_point_cast<std::chrono::milliseconds>(eventNotBeforeTS).time_since_epoch().count();
+			"WHERE CREATED_TS >= ? AND CREATED_TS <= ? AND  STATE = ?;";
+	static const std::string sqlStrWithoutState = "SELECT "
+			"TASK_ID, "
+			"CRC32, "
+			"PRIORITY, "
+			"PRIORITY_TS, "
+			"EVENT_TYPE, "
+			"SETTINGS, "
+			"METRICS, "
+			"SIGNALS, "
+			"CONDITION, "
+			"CREATED_TS, "
+			"BEGIN_TS, "
+			"END_TS, "
+			"LAST_HEARTBEAT_TS, "
+			"RETURN_CODE, "
+			"MESSAGE, "
+			"STATE "
+			"FROM TASKS "
+			"WHERE CREATED_TS >= ? AND CREATED_TS <= ?;";
 
-    for(esl::database::ResultSet resultSet = statement.execute(common::types::State::toString(state), eventNotBefore, eventNotAfter); resultSet; resultSet.next()) {
+    std::int64_t eventNotBefore = eventNotAfterTS == std::chrono::system_clock::time_point() ? std::numeric_limits<std::int64_t>::lowest() : std::chrono::time_point_cast<std::chrono::milliseconds>(eventNotAfterTS).time_since_epoch().count();
+    std::int64_t eventNotAfter = eventNotBeforeTS == std::chrono::system_clock::time_point() ? std::numeric_limits<std::int64_t>::max() : std::chrono::time_point_cast<std::chrono::milliseconds>(eventNotBeforeTS).time_since_epoch().count();
+    common::types::State::Type state  = stateStr.empty() ? common::types::State::Type::done : common::types::State::toState(stateStr);
+
+	esl::database::PreparedStatement statement = dbConnection.prepare(stateStr.empty() ? sqlStrWithoutState : sqlStrWithState);
+	for(esl::database::ResultSet resultSet = stateStr.empty() ? statement.execute(eventNotBefore, eventNotAfter) : statement.execute(eventNotBefore, eventNotAfter, stateStr); resultSet; resultSet.next()) {
     	Task task;
 
     	task.taskId = resultSet[0].isNull() ? "" : resultSet[0].asString();
@@ -282,24 +321,24 @@ std::vector<Dao::Task> Dao::loadTasks(const common::types::State::Type& state, c
     	if(!resultSet[9].isNull()) {
     	    task.createdTS = std::chrono::time_point<std::chrono::system_clock>(std::chrono::milliseconds(resultSet[9].asInteger()));
     	}
-    	task.startTS = toTimepoint(resultSet[10].isNull() ? "" : resultSet[10].asString());
-    	task.endTS = toTimepoint(resultSet[11].isNull() ? "" : resultSet[11].asString());
+    	task.startTS = common::Timestamp::fromString(resultSet[10].isNull() ? "" : resultSet[10].asString());
+    	task.endTS = common::Timestamp::fromString(resultSet[11].isNull() ? "" : resultSet[11].asString());
     	if(!resultSet[12].isNull()) {
     	    task.lastHeartbeatTS = std::chrono::time_point<std::chrono::system_clock>(std::chrono::milliseconds(resultSet[12].asInteger()));
     	}
-    	task.state = state;
     	task.returnCode = resultSet[13].isNull() ? 0 : resultSet[13].asInteger();
     	task.message = resultSet[14].isNull() ? "" : resultSet[14].asString();
+	    task.state  = stateStr.empty() ? resultSet[15].isNull() ? common::types::State::Type::done : common::types::State::toState(resultSet[15].asString()) : state;
 
         results.push_back(task);
     }
 
-    logger.debug << "Active StoreWarehouses: " << results.size() << "\n";
+    logger.debug << "Active tasks: " << results.size() << "\n";
 
     return results;
 }
 
-std::unique_ptr<Dao::Task> Dao::loadTaskByTaskId(const std::string& taskId) {
+std::unique_ptr<Dao::Task> Dao::loadTaskByTaskId(const std::string& namespaceId, const std::string& taskId) {
     std::unique_ptr<Task> task;
 
 	static const std::string sqlStr = "SELECT "
@@ -344,8 +383,8 @@ std::unique_ptr<Dao::Task> Dao::loadTaskByTaskId(const std::string& taskId) {
     	if(!resultSet[8].isNull()) {
     		task->createdTS = std::chrono::time_point<std::chrono::system_clock>(std::chrono::milliseconds(resultSet[8].asInteger()));
     	}
-    	task->startTS = toTimepoint(resultSet[9].isNull() ? "" : resultSet[9].asString());
-    	task->endTS = toTimepoint(resultSet[10].isNull() ? "" : resultSet[10].asString());
+    	task->startTS = common::Timestamp::fromString(resultSet[9].isNull() ? "" : resultSet[9].asString());
+    	task->endTS = common::Timestamp::fromString(resultSet[10].isNull() ? "" : resultSet[10].asString());
     	if(!resultSet[11].isNull()) {
     	    task->lastHeartbeatTS = std::chrono::time_point<std::chrono::system_clock>(std::chrono::milliseconds(resultSet[11].asInteger()));
     	}
@@ -356,7 +395,7 @@ std::unique_ptr<Dao::Task> Dao::loadTaskByTaskId(const std::string& taskId) {
 	return task;
 }
 
-std::unique_ptr<Dao::Task> Dao::loadLatesTaskByEventTypeAndCrc32(const std::string& eventType, std::uint32_t crc32) {
+std::unique_ptr<Dao::Task> Dao::loadLatesTaskByEventTypeAndCrc32(const std::string& namespaceId, const std::string& eventType, std::uint32_t crc32) {
     std::unique_ptr<Task> task;
 
 	static const std::string sqlStr = "SELECT "
@@ -406,8 +445,8 @@ std::unique_ptr<Dao::Task> Dao::loadLatesTaskByEventTypeAndCrc32(const std::stri
     	}
     	task->condition = resultSet[7].isNull() ? "" : resultSet[7].asString();
 	    task->createdTS = createdTS;
-    	task->startTS = toTimepoint(resultSet[9].isNull() ? "" : resultSet[9].asString());
-    	task->endTS = toTimepoint(resultSet[10].isNull() ? "" : resultSet[10].asString());
+    	task->startTS = common::Timestamp::fromString(resultSet[9].isNull() ? "" : resultSet[9].asString());
+    	task->endTS = common::Timestamp::fromString(resultSet[10].isNull() ? "" : resultSet[10].asString());
     	if(!resultSet[11].isNull()) {
     	    task->lastHeartbeatTS = std::chrono::time_point<std::chrono::system_clock>(std::chrono::milliseconds(resultSet[11].asInteger()));
     	}
@@ -417,7 +456,7 @@ std::unique_ptr<Dao::Task> Dao::loadLatesTaskByEventTypeAndCrc32(const std::stri
 	return task;
 }
 
-std::vector<Dao::Task> Dao::loadTasksByEventTypeAndState(const std::string& eventType, const common::types::State::Type& state) {
+std::vector<Dao::Task> Dao::loadTasksByEventTypeAndState(const std::string& namespaceId, const std::string& eventType, const common::types::State::Type& state) {
     std::vector<Task> tasks;
 
 	static const std::string sqlStr = "SELECT "
@@ -461,8 +500,8 @@ std::vector<Dao::Task> Dao::loadTasksByEventTypeAndState(const std::string& even
     	if(!resultSet[8].isNull()) {
     		task.createdTS = std::chrono::time_point<std::chrono::system_clock>(std::chrono::milliseconds(resultSet[8].asInteger()));
     	}
-    	task.startTS = toTimepoint(resultSet[9].isNull() ? "" : resultSet[9].asString());
-    	task.endTS = toTimepoint(resultSet[10].isNull() ? "" : resultSet[10].asString());
+    	task.startTS = common::Timestamp::fromString(resultSet[9].isNull() ? "" : resultSet[9].asString());
+    	task.endTS = common::Timestamp::fromString(resultSet[10].isNull() ? "" : resultSet[10].asString());
     	if(!resultSet[11].isNull()) {
     	    task.lastHeartbeatTS = std::chrono::time_point<std::chrono::system_clock>(std::chrono::milliseconds(resultSet[11].asInteger()));
     	}
@@ -473,6 +512,93 @@ std::vector<Dao::Task> Dao::loadTasksByEventTypeAndState(const std::string& even
     }
 
     return tasks;
+}
+
+void Dao::updateEventTypes(const std::vector<std::pair<std::string, std::string>>& eventTypes) {
+	/* ********************** *
+	 * delete old event types *
+	 * ********************** */
+	static const std::string sqlDeleteStr = "DELETE "
+			"FROM AVAILABLE_EVENT_TYPES "
+			"WHERE EVENT_TYPE = ?;";
+
+    esl::database::PreparedStatement deleteStatement = dbConnection.prepare(sqlDeleteStr);
+    for(const auto& eventType : eventTypes) {
+    	deleteStatement.execute(eventType.second);
+    }
+
+	/* ********************** *
+	 * insert new event types *
+	 * ********************** */
+	static const std::string sqlInsertStr = "INSERT INTO AVAILABLE_EVENT_TYPES ("
+			"EVENT_TYPE, "
+			"LAST_HEARTBEAT_TS) "
+			"VALUES (?, ?);";
+
+	logger.trace << "Dao::updateEventTypes statement: " << sqlInsertStr << "\n";
+
+    std::int64_t currentTS = std::chrono::time_point_cast<std::chrono::milliseconds>(std::chrono::system_clock::now()).time_since_epoch().count();
+    esl::database::PreparedStatement insertStatement = dbConnection.prepare(sqlInsertStr);
+    for(const auto& eventType : eventTypes) {
+        insertStatement.execute(eventType.second, currentTS);
+    }
+}
+
+std::vector<std::string> Dao::loadEventTypes(const std::string& namespaceId) {
+	std::vector<std::string> results;
+
+	/* **************** *
+	 * load event types *
+	 * **************** */
+	static const std::string sqlSelectStr = "SELECT "
+			"EVENT_TYPE "
+			"FROM AVAILABLE_EVENT_TYPES;";
+	logger.trace << "Dao::loadAvailableEventTypes statement: " << sqlSelectStr << "\n";
+
+    esl::database::PreparedStatement statement = dbConnection.prepare(sqlSelectStr);
+	for(esl::database::ResultSet resultSet = statement.execute(); resultSet; resultSet.next()) {
+        results.push_back(resultSet[0].isNull() ? "" : resultSet[0].asString());
+    }
+
+    logger.debug << "Active available event types: " << results.size() << "\n";
+
+    return results;
+}
+
+void Dao::cleanup(std::chrono::milliseconds timeoutZombie, std::chrono::milliseconds timeoutCleanup) {
+    std::int64_t cleanupTS = std::chrono::time_point_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - timeoutCleanup).time_since_epoch().count();
+
+	/* **************** *
+	 * delete old tasks *
+	 * **************** */
+	static const std::string sqlDeleteTasksStr = "DELETE "
+			"FROM TASKS "
+			"WHERE LAST_HEARTBEAT_TS <= ?;";
+	dbConnection.prepare(sqlDeleteTasksStr).execute(cleanupTS);
+
+
+	std::int64_t zombieTS = std::chrono::time_point_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - timeoutZombie).time_since_epoch().count();
+
+	/* *************************************** *
+	 * set state to zombie if task is outdated *
+	 * *************************************** */
+	static const std::string sqlUpdateStr = "UPDATE TASKS SET "
+			"STATE = ? "
+			"WHERE LAST_HEARTBEAT_TS <= ? AND (STATE = ? OR STATE = ?);";
+	dbConnection.prepare(sqlUpdateStr).execute(
+			common::types::State::toString(common::types::State::zombie),
+			zombieTS,
+			common::types::State::toString(common::types::State::queued),
+			common::types::State::toString(common::types::State::running));
+
+
+	/* ********************** *
+	 * delete old event types *
+	 * ********************** */
+	static const std::string sqlDeleteAvailabelEventsStr = "DELETE "
+			"FROM AVAILABLE_EVENT_TYPES "
+			"WHERE LAST_HEARTBEAT_TS <= ?;";
+	dbConnection.prepare(sqlDeleteAvailabelEventsStr).execute(zombieTS);
 }
 
 } /* namespace head */

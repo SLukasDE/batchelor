@@ -1,39 +1,35 @@
+/*
+ * This file is part of Batchelor.
+ * Copyright (C) 2023-2024 Sven Lukas
+ *
+ * Batchelor is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Batchelor is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public
+ * License along with Batchelor.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #ifndef BATCHELOR_CONTROL_MAIN_H_
 #define BATCHELOR_CONTROL_MAIN_H_
 
-#include <batchelor/control/Options.h>
-
-#include <batchelor/service/Service.h>
-
-#include <esl/com/http/client/Connection.h>
-#include <esl/com/http/client/ConnectionFactory.h>
-
-#include <memory>
-#include <string>
+#include <batchelor/common/Main.h>
 
 namespace batchelor {
 namespace control {
 
-class Main {
+class Main : public common::Main {
 public:
-	Main(const Options& options);
-
-	void sendEvent();
-	void waitTask(const std::string& taskId);
-	void signalTask();
-	void showTask();
-	void showTasks();
-
-	int getReturnCode() const;
+	Main(int argc, const char* argv[]);
 
 private:
-	std::unique_ptr<esl::com::http::client::Connection> createHTTPConnection();
-	esl::com::http::client::ConnectionFactory& getHTTPConnectionFactory();
-
-	const Options& options;
-	std::string url;
-	std::unique_ptr<esl::com::http::client::ConnectionFactory> httpConnectionFactory;
-	int rc = 0;
+	static int run(int argc, const char* argv[]);
 };
 
 } /* namespace control */

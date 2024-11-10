@@ -1,15 +1,40 @@
-#include <batchelor/head/CRC32.h>
+/*
+ * This file is part of Batchelor.
+ * Copyright (C) 2023-2024 Sven Lukas
+ *
+ * Batchelor is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Batchelor is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public
+ * License along with Batchelor.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+#include <batchelor/common/auth/UserData.h>
+#include <batchelor/common/Timestamp.h>
+#include <batchelor/common/types/State.h>
+
+#include <batchelor/condition/Compiler.h>
+#include <batchelor/condition/Scanner.h>
+
 #include <batchelor/head/Service.h>
 #include <batchelor/head/Logger.h>
 
 #include <batchelor/service/schemas/RunConfiguration.h>
 #include <batchelor/service/schemas/Signal.h>
 
-#include <batchelor/common/types/State.h>
-
 #include <esl/com/http/server/exception/StatusCode.h>
+#include <esl/object/Value.h>
 #include <esl/system/Stacktrace.h>
+#include <esl/utility/CRC32.h>
 #include <esl/utility/MIME.h>
+#include <esl/utility/String.h>
 
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_generators.hpp>
@@ -18,106 +43,99 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
-#include <ctime>
-#include <stdexcept>
-#include <time.h>
-
-#if __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ > 8)
-#include <iomanip>
 #include <sstream>
-#endif
+#include <stdexcept>
+#include <utility>
 
-#include <iostream>
 namespace batchelor {
 namespace head {
 namespace {
 Logger logger("batchelor::head::Service");
 
-// creates a string in ISO 8601 format, e.g. '2012-04-21T18:25:43-05:00'
-std::string toJSONTimestamp(const std::chrono::time_point<std::chrono::system_clock>& time_point) {
-#if __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ > 8)
-	std::ostringstream ss;
-	std::time_t tt = std::chrono::system_clock::to_time_t(time_point);
-	std::tm tm = *std::localtime(&tt);
-	ss << std::put_time(&tm, "%FT%T%z");
-	return ss.str();
-#else
-	auto millisecs = std::chrono::duration_cast<std::chrono::milliseconds>(time_point.time_since_epoch());
-	std::time_t timestamp = millisecs.count() / 1000;
-	int millisec = static_cast<int>(millisecs.count() % 1000);
-
-	std::tm tm;
-	localtime_r(&timestamp, &tm);
-
-	char buffer[100];
-	char* bufferPtr = &buffer[0];
-	std::size_t length;
-
-	length = strftime(bufferPtr, 100, "%FT%T", &tm);
-	if(length == 0) {
-		return "";
-	}
-	bufferPtr += length;
-
-	sprintf(bufferPtr, ".%03d", millisec);
-	bufferPtr += 4;
-
-	length = strftime(bufferPtr, 100-length-4, "%z", &tm);
-	if(length == 0) {
-		return "";
-	}
-
-	bufferPtr[length+1] = 0;
-	bufferPtr[length-0] = bufferPtr[length-1];
-	bufferPtr[length-1] = bufferPtr[length-2];
-	bufferPtr[length-2] = ':';
-
-	return buffer;
-#endif
-}
-
-std::chrono::time_point<std::chrono::system_clock> fromJSONTimestamp(const std::string& str) {
-	std::tm timeinfo;
-#if __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ > 8)
-	std::istringstream is{str};
-	is.imbue(std::locale("de_DE.utf-8"));
-	is >> std::get_time(&timeinfo, "%FT%T%z");
-    if (is.fail()) {
-        throw std::runtime_error("Parse failed");
-    }
-#else
-    strptime(str.c_str(), "%FT%T%z", &timeinfo);
-#endif
-    std::time_t tt = std::mktime(&timeinfo);
-    return std::chrono::system_clock::from_time_t(tt);
-}
 
 service::schemas::RunResponse makeRunResponse(const Dao::Task& task) {
 	service::schemas::RunResponse rv;
 
 	rv.taskId = task.taskId;
-	rv.message = common::types::State::toString(task.state);
+	rv.message = batchelor::common::types::State::toString(task.state);
+
+	return rv;
+}
+
+service::schemas::RunResponse makeRunResponse(const std::string& errorMessage) {
+	service::schemas::RunResponse rv;
+
+	rv.taskId = "";
+	rv.message = errorMessage;
 
 	return rv;
 }
 
 std::uint32_t makeCrc32(const service::schemas::RunRequest& runRequest) {
 	std::string crc32Str;
-	for(const auto& setting : runRequest.settings) {
-		if(!crc32Str.empty()) {
-			crc32Str += ";";
-		}
-		crc32Str += setting.key + "=" + setting.value;
-	}
-	return CRC32().pushData(crc32Str.c_str(), crc32Str.size()).get();
-}
 
-std::vector<service::schemas::Setting> getMetrics(const std::vector<service::schemas::Setting>& metrics) {
-	return metrics;
+	// Condition and priority may be changed.
+	// crc32Str = runRequest.condition;
+
+	for(const auto& setting : runRequest.settings) {
+		crc32Str += ";" + setting.key + "=" + setting.value;
+	}
+	for(const auto& metric : runRequest.metrics) {
+		crc32Str += ";" + metric.key + "=" + metric.value;
+	}
+
+	return esl::utility::CRC32().pushData(crc32Str.c_str(), crc32Str.size()).get();
 }
 
 bool evaluateCondition(const std::vector<service::schemas::Setting>& metrics, const std::string& condition) {
-	return true;
+	if(condition.empty()) {
+		return true;
+	}
+
+	condition::Compiler compiler;
+	bool rv = false;
+
+	for(const auto& metric : metrics) {
+		compiler.addVariable(metric.key, metric.value);
+	}
+
+#if 0
+std::cout << "METRICS:" << std::endl;
+for(const auto& metric : metrics) {
+std::cout << "- \"" << metric.key << "\" = \"" << metric.value << "\"" << std::endl;
+}
+std::cout << "CONDITION: '" << condition << "'" << std::endl;
+#endif
+
+	std::stringstream str;
+	str << condition;
+	condition::Scanner scanner(str);
+
+	try {
+		compiler.parse(scanner);
+	}
+	catch(const std::exception& e) {
+		logger.error << "Exception occurred while parsing condition \"" << condition << "\": \"" << e.what() << "\n";
+		return false;
+	}
+	catch(...) {
+		logger.error << "Exception occurred while parsing condition \"" << condition << "\".\n";
+		return false;
+	}
+
+	try {
+		rv = compiler.toBool();
+	}
+	catch(const std::exception& e) {
+		logger.error << "Exception occurred while executing condition \"" << condition << "\": \"" << e.what() << "\n";
+		return false;
+	}
+	catch(...) {
+		logger.error << "Exception occurred while executing condition \"" << condition << "\".\n";
+		return false;
+	}
+
+	return rv;
 }
 
 service::schemas::TaskStatusHead taskToTaskStatusHead(const Dao::Task& task) {
@@ -126,6 +144,7 @@ service::schemas::TaskStatusHead taskToTaskStatusHead(const Dao::Task& task) {
 	rv.runConfiguration.eventType = task.eventType;
 	rv.runConfiguration.taskId = task.taskId;
 	rv.runConfiguration.settings = task.settings;
+	rv.runConfiguration.metrics = task.metrics;
 	/* Metrics contains all metric variables and their values as used for the condition at the time the task has been assigned to a worker and state changed to running.
 	 * Available variables to get used in the formula are all variables delivered as metrics of "fetch-request" like
 	 * - cpu usage               (CPU_USAGE),
@@ -140,48 +159,68 @@ service::schemas::TaskStatusHead taskToTaskStatusHead(const Dao::Task& task) {
 	 * - priority,
 	 * - ...
 	 */
-	rv.metrics = task.metrics;
-	rv.state = common::types::State::toString(task.state);
+//	rv.metrics = task.metrics;
+	rv.state = batchelor::common::types::State::toString(task.state);
+	rv.condition = task.condition;
 	rv.returnCode = task.returnCode;
 	rv.message = task.message;
-	rv.tsCreated = toJSONTimestamp(task.createdTS);
-	rv.tsRunning = toJSONTimestamp(task.startTS);
-	rv.tsFinished = toJSONTimestamp(task.endTS);
-	rv.tsLastHeartBeat = toJSONTimestamp(task.lastHeartbeatTS);
+	rv.tsCreated = batchelor::common::Timestamp::toJSON(task.createdTS);
+	rv.tsRunning = batchelor::common::Timestamp::toJSON(task.startTS);
+	rv.tsFinished = batchelor::common::Timestamp::toJSON(task.endTS);
+	rv.tsLastHeartBeat = batchelor::common::Timestamp::toJSON(task.lastHeartbeatTS);
 
 	return rv;
 }
 
+void addOrReplaceMetric(std::vector<service::schemas::Setting>& metrics, const std::string& key, const std::string& value) {
+	for(auto& metric : metrics) {
+		if(metric.key == key) {
+			metric.value = value;
+			return;
+		}
+	}
+	metrics.emplace_back(service::schemas::Setting::make(key, value));
 }
 
-Service::Service(const esl::object::Context& aContext, esl::database::ConnectionFactory& aDbConnectionFactory)
+}
+
+Service::Service(const esl::object::Context& aContext, Engine& aEngine, std::mutex& mutex)
 : context(aContext),
-  dbConnectionFactory(aDbConnectionFactory)
+  engine(aEngine),
+  lockMutex(mutex)
 { }
 
-service::schemas::FetchResponse Service::fetchTask(const service::schemas::FetchRequest& fetchRequest) {
-	logger.trace << "fetchTask\n";
-    // siegburger str schleumer
-	// 30.8., 31.8, 1.9.
+void Service::alive() {
+	logger.trace << "Service call: \"alive\"\n";
+}
+
+service::schemas::FetchResponse Service::fetchTask(const std::string& namespaceId, const service::schemas::FetchRequest& fetchRequest) {
+	logger.trace << "Service call: \"fetchTask\"\n";
+
+	auto roles = common::auth::UserData::getRoles(context, namespaceId);
+	if(roles.count(common::auth::UserData::Role::worker) == 0) {
+		throw esl::com::http::server::exception::StatusCode(401);
+	}
+
 	service::schemas::FetchResponse rv;
 
 	for(const auto& taskStatus : fetchRequest.tasks) {
-		std::unique_ptr<Dao::Task> existingTask = getDao().loadTaskByTaskId(taskStatus.taskId);
+		std::unique_ptr<Dao::Task> existingTask = getDao().loadTaskByTaskId(namespaceId, taskStatus.taskId);
 		if(!existingTask) {
 			logger.warn << "Worker sent an update for a non existing task \"" << taskStatus.taskId << "\"\n.";
 			continue;
 		}
-		if(existingTask->state != common::types::State::running) {
+		if(existingTask->state != batchelor::common::types::State::running) {
 			logger.warn << "Worker sent an update for a non running task \"" << taskStatus.taskId << "\"\n.";
 			continue;
 		}
 
-		existingTask->state = common::types::State::toState(taskStatus.state);
+		existingTask->state = batchelor::common::types::State::toState(taskStatus.state);
 		existingTask->returnCode = taskStatus.returnCode;
 		existingTask->message = taskStatus.message;
 		existingTask->lastHeartbeatTS = std::chrono::system_clock::now();
 
-		if(existingTask->state == common::types::State::running) {
+		if(existingTask->state == batchelor::common::types::State::running) {
 			for(const auto& signalId : existingTask->signals) {
 				service::schemas::Signal signal;
 				signal.signal = signalId;
@@ -194,52 +233,95 @@ service::schemas::FetchResponse Service::fetchTask(const service::schemas::Fetch
 			existingTask->endTS = existingTask->lastHeartbeatTS;
 		}
 
-		getDao().updateTask(*existingTask);
+		getDao().updateTask(namespaceId, *existingTask);
+		engine.onUpdateTask(*existingTask);
 	}
 
 	std::vector<Dao::Task> tasks;
+	std::vector<std::pair<std::string, std::string>> eventTypes;
 	for(const auto eventType : fetchRequest.eventTypes) {
 		if(eventType.available) {
-			std::vector<Dao::Task> eventTypeTasks = getDao().loadTasksByEventTypeAndState(eventType.eventType, common::types::State::queued);
+			std::vector<Dao::Task> eventTypeTasks = getDao().loadTasksByEventTypeAndState(namespaceId, eventType.eventType, batchelor::common::types::State::queued);
 			tasks.insert(tasks.end(), eventTypeTasks.begin(), eventTypeTasks.end());
 		}
+		eventTypes.emplace_back(namespaceId, eventType.eventType);
 	}
-	std::sort(std::begin(tasks), std::end(tasks), [](const Dao::Task &a, const Dao::Task &b) {
-		return a.effectivePriority < b.effectivePriority || (a.effectivePriority == b.effectivePriority && a.createdTS > b.createdTS);
+	std::sort(std::begin(tasks), std::end(tasks), [](const Dao::Task& a, const Dao::Task& b) {
+		return a.effectivePriority > b.effectivePriority || (a.effectivePriority == b.effectivePriority && a.createdTS < b.createdTS);
 	});
+	getDao().updateEventTypes(eventTypes);
 
-	std::vector<service::schemas::Setting> metrics = getMetrics(fetchRequest.metrics);
 	for(auto& task : tasks) {
-		if(evaluateCondition(metrics, task.condition)) {
-			task.state = common::types::State::running;
-			task.startTS = task.lastHeartbeatTS = std::chrono::system_clock::now();
-			task.metrics = metrics;
-			getDao().updateTask(task);
+		// Initialize 'metrics' with metrics set by batchelor control
+		std::vector<service::schemas::Setting> metrics = task.metrics;
 
-			service::schemas::RunConfiguration runConfiguration;
-
-			runConfiguration.taskId = task.taskId;
-			runConfiguration.eventType = task.eventType;
-			runConfiguration.settings = task.settings;
-
-			rv.runConfigurations.push_back(runConfiguration);
-
-			break;
+		// add or replace metrics with metrics provided by the worker
+		for(const auto& fetchRequestMetric : fetchRequest.metrics) {
+			addOrReplaceMetric(metrics, fetchRequestMetric.key, fetchRequestMetric.value);
 		}
+
+
+
+
+		// add or replace metrics with metrics calculated by head-server, e.g. waiting time
+		std::chrono::system_clock::time_point nowTS = std::chrono::system_clock::now();
+
+		auto secondsWaiting = std::chrono::duration_cast<std::chrono::seconds>(nowTS-task.createdTS).count();
+		addOrReplaceMetric(metrics, "SECONDS_WAITING", std::to_string(secondsWaiting));
+
+		auto minutesWaiting = std::chrono::duration_cast<std::chrono::minutes>(nowTS-task.createdTS).count();
+		addOrReplaceMetric(metrics, "MINUTES_WAITING", std::to_string(minutesWaiting));
+
+
+
+
+		if(!evaluateCondition(metrics, task.condition)) {
+			continue;
+		}
+
+		task.state = batchelor::common::types::State::running;
+		task.returnCode = 0;
+		task.startTS = task.lastHeartbeatTS = std::chrono::system_clock::now();
+		task.metrics = metrics;
+
+		getDao().updateTask(namespaceId, task);
+		engine.onUpdateTask(task);
+
+		service::schemas::RunConfiguration runConfiguration;
+
+		runConfiguration.taskId = task.taskId;
+		runConfiguration.eventType = task.eventType;
+		runConfiguration.settings = task.settings;
+		runConfiguration.metrics = task.metrics;
+		rv.runConfigurations.push_back(runConfiguration);
+
+		break;
 	}
 
 	return rv;
 }
 
-std::vector<service::schemas::TaskStatusHead> Service::getTasks(const std::string& stateStr, const std::string& eventNotAfterStr, const std::string& eventNotBeforeStr) {
-	logger.trace << "getTasks\n";
+std::vector<service::schemas::TaskStatusHead> Service::getTasks(const std::string& namespaceId, const std::string& state, const std::string& eventNotAfterStr, const std::string& eventNotBeforeStr) {
+	logger.trace << "Service call: \"getTasks\"\n";
+
+	auto roles = common::auth::UserData::getRoles(context, namespaceId);
+	if(roles.count(common::auth::UserData::Role::readOnly) == 0 && roles.count(common::auth::UserData::Role::execute) == 0) {
+		throw esl::com::http::server::exception::StatusCode(401);
+	}
+
 	std::vector<service::schemas::TaskStatusHead> rv;
 
-	auto state = common::types::State::toState(stateStr);
-	auto eventNotAfter = fromJSONTimestamp(eventNotAfterStr);
-	auto eventNotBefore = fromJSONTimestamp(eventNotBeforeStr);
+	std::chrono::system_clock::time_point eventNotAfter;
+	if(!eventNotAfterStr.empty()) {
+		eventNotAfter = batchelor::common::Timestamp::fromJSON(eventNotAfterStr);
+	}
 
-	std::vector<Dao::Task> tasks = getDao().loadTasks(state, eventNotAfter, eventNotBefore);
+	std::chrono::system_clock::time_point eventNotBefore;
+	if(!eventNotBeforeStr.empty()) {
+		eventNotBefore = batchelor::common::Timestamp::fromJSON(eventNotBeforeStr);
+	}
+
+	std::vector<Dao::Task> tasks = getDao().loadTasks(namespaceId, state, eventNotAfter, eventNotBefore);
 	for(const auto& task : tasks) {
 		rv.push_back(taskToTaskStatusHead(task));
 	}
@@ -248,10 +330,16 @@ std::vector<service::schemas::TaskStatusHead> Service::getTasks(const std::strin
 }
 
 
-std::unique_ptr<service::schemas::TaskStatusHead> Service::getTask(const std::string& taskId) {
-	logger.trace << "getTask\n";
+std::unique_ptr<service::schemas::TaskStatusHead> Service::getTask(const std::string& namespaceId, const std::string& taskId) {
+	logger.trace << "Service call: \"getTask\"\n";
+
+	auto roles = common::auth::UserData::getRoles(context, namespaceId);
+	if(roles.count(common::auth::UserData::Role::readOnly) == 0 && roles.count(common::auth::UserData::Role::execute) == 0) {
+		throw esl::com::http::server::exception::StatusCode(401);
+	}
+
 	std::unique_ptr<service::schemas::TaskStatusHead> rv;
-	std::unique_ptr<Dao::Task> task = getDao().loadTaskByTaskId(taskId);
+	std::unique_ptr<Dao::Task> task = getDao().loadTaskByTaskId(namespaceId, taskId);
 
 	if(task) {
 		rv.reset(new service::schemas::TaskStatusHead);
@@ -261,22 +349,65 @@ std::unique_ptr<service::schemas::TaskStatusHead> Service::getTask(const std::st
 	return rv;
 }
 
-service::schemas::RunResponse Service::runTask(const service::schemas::RunRequest& runRequest) {
-	logger.trace << "runTask\n";
+service::schemas::RunResponse Service::runTask(const std::string& namespaceId, const service::schemas::RunRequest& runRequest) {
+	logger.trace << "Service call: \"runTask\"\n";
+
+	auto roles = common::auth::UserData::getRoles(context, namespaceId);
+	if(roles.count(common::auth::UserData::Role::execute) == 0) {
+		throw esl::com::http::server::exception::StatusCode(401);
+	}
+
+	if(!runRequest.condition.empty()) {
+		condition::Compiler compiler;
+
+		std::stringstream str;
+		str << runRequest.condition;
+		condition::Scanner scanner(str);
+
+		try {
+			compiler.parse(scanner);
+		}
+		catch(const std::exception& e) {
+			return makeRunResponse("Exception occurred while parsing condition \"" + runRequest.condition + "\": \"" + e.what());
+		}
+		catch(...) {
+			return makeRunResponse("Exception occurred while parsing condition \"" + runRequest.condition + "\".");
+		}
+	}
+
 	service::schemas::RunResponse rv;
 
+	// calculates CRC32 from  and runRequest.metrics
 	std::uint32_t crc32 = makeCrc32(runRequest);
 
-	std::unique_ptr<Dao::Task> existingTask = getDao().loadLatesTaskByEventTypeAndCrc32(runRequest.eventType, crc32);
-	if(existingTask && (existingTask->state == common::types::State::queued || existingTask->state == common::types::State::running)) {
+	std::unique_ptr<Dao::Task> existingTask = getDao().loadLatesTaskByEventTypeAndCrc32(namespaceId, runRequest.eventType, crc32);
+	if(existingTask && (existingTask->state == batchelor::common::types::State::queued || existingTask->state == batchelor::common::types::State::running)) {
 		existingTask->priority = runRequest.priority;
-		existingTask->settings = runRequest.settings;
+		//existingTask->settings = runRequest.settings;
+		//existingTask->metrics = runRequest.metrics;
 		existingTask->condition = runRequest.condition;
-		getDao().updateTask(*existingTask);
+		getDao().updateTask(namespaceId, *existingTask);
+		engine.onUpdateTask(*existingTask);
 
 		rv = makeRunResponse(*existingTask);
 	}
 	else {
+		{
+			bool eventTypeAvailable = false;
+			auto availableEventTypes = getDao().loadEventTypes(namespaceId);
+			for(const auto& availableEventType : availableEventTypes) {
+				if(availableEventType == runRequest.eventType) {
+					eventTypeAvailable = true;
+					break;
+				}
+			}
+
+			if(!eventTypeAvailable) {
+				return makeRunResponse("Event type is not available");
+				//throw esl::com::http::server::exception::StatusCode(404, esl::utility::MIME::Type::applicationJson, "message: Event type '" + runRequest.eventType + "' is not available");
+			}
+		}
+
 		//boost::uuids::uuid taskIdUUID; // initialize uuid
 		static boost::uuids::random_generator rg;
 		boost::uuids::uuid taskIdUUID = rg();
@@ -287,38 +418,66 @@ service::schemas::RunResponse Service::runTask(const service::schemas::RunReques
 		task.eventType = runRequest.eventType;
 		task.priority = runRequest.priority;
 		task.settings = runRequest.settings;
+		task.metrics = runRequest.metrics;
+		task.condition = runRequest.condition;
 #if 1
 		task.createdTS = std::chrono::system_clock::now();
 #else
 		task.createdTS = toJSONTimestamp(std::chrono::system_clock::now());
 #endif
-		task.state = common::types::State::Type::queued;
-		getDao().saveTask(task);
+		task.state = batchelor::common::types::State::Type::queued;
+
+		getDao().saveTask(namespaceId, task);
+		engine.onUpdateTask(task);
 
 		rv = makeRunResponse(task);
 	}
 
-	//logger.info << "task.createdTS: " << toJSONTimestamp(task.createdTS) << "\n";
-
-	//rv.taskId = "1234-ab3c-1234-ab3c-1234-ab3c-1234-ab3c";
-
 	return rv;
 }
 
-void Service::sendSignal(const std::string& taskId, const std::string& signal) {
-	logger.trace << "sendSignal\n";
-	std::unique_ptr<Dao::Task> task = getDao().loadTaskByTaskId(taskId);
+void Service::sendSignal(const std::string& namespaceId, const std::string& taskId, const std::string& signal) {
+	logger.trace << "Service call: \"sendSignal\"\n";
+
+	auto roles = common::auth::UserData::getRoles(context, namespaceId);
+	if(roles.count(common::auth::UserData::Role::execute) == 0) {
+		throw esl::com::http::server::exception::StatusCode(401);
+	}
+
+	std::unique_ptr<Dao::Task> task = getDao().loadTaskByTaskId(namespaceId, taskId);
 	if(!task) {
 		throw esl::com::http::server::exception::StatusCode(404, esl::utility::MIME::Type::applicationJson, "{}");
 	}
 
-	task->signals.push_back(signal);
-	getDao().updateTask(*task);
+	if(task->state == common::types::State::queued || task->state == common::types::State::running) {
+
+		if(task->state == common::types::State::queued) {
+			task->state = common::types::State::signaled;
+		}
+
+		if(task->state == common::types::State::running) {
+			task->signals.push_back(signal);
+		}
+
+		getDao().updateTask(namespaceId, *task);
+		engine.onUpdateTask(*task);
+	}
+}
+
+std::vector<std::string> Service::getEventTypes(const std::string& namespaceId) {
+	logger.trace << "Service call: \"getEventTypes\"\n";
+
+	auto roles = common::auth::UserData::getRoles(context, namespaceId);
+	if(roles.count(common::auth::UserData::Role::readOnly) == 0 && roles.count(common::auth::UserData::Role::execute) == 0) {
+		throw esl::com::http::server::exception::StatusCode(401);
+	}
+
+	return getDao().loadEventTypes(namespaceId);
 }
 
 esl::database::Connection& Service::getDBConnection() const {
 	if(!dbConnection) {
-		dbConnection = dbConnectionFactory.createConnection();
+		dbConnection = engine.getDbConnectionFactory().createConnection();
 	}
 
 	if(!dbConnection) {
@@ -335,7 +494,6 @@ Dao& Service::getDao() const {
 
 	return *dao;
 }
-
 
 } /* namespace head */
 } /* namespace batchelor */

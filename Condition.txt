@@ -1,0 +1,1 @@
+((${CLOUD_ID} <> "GCP") || (${SECONDS_WAITING} >= 20))

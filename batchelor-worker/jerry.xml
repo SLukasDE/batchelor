@@ -1,43 +1,46 @@
 <context>
-	<library file="./build/batchelor-worker/1.5.0/default/architecture/linux-gcc/link-dynamic/libbatchelor-worker.so"/>
+	<library file="./build/batchelor-worker/0.0.1/default/architecture/linux-gcc/link-dynamic/libbatchelor-worker.so"/>
 	
-	<http-client id="http-connection-factory-1" implementation="eslx/com/http/client/ConnectionFactory">
+	<object id="batchelor-head-server-1" implementation="batchelor-connection-basic">
 		<parameter key="url" value="http://localhost:8080"/>
-		<parameter key="timeout" value="10"/>
+		<!--parameter key="timeout" value="10"/-->
 		<parameter key="username" value="hans"/>
 		<parameter key="password" value="wurst"/>
-	</http-client>
+	</object>
     
-	<http-client id="http-connection-factory-2" implementation="eslx/com/http/client/ConnectionFactory">
+	<object id="batchelor-head-server-2" implementation="batchelor-connection-basic">
 		<parameter key="url" value="https://localhost:8090"/>
-		<parameter key="timeout" value="10"/>
+		<!--parameter key="timeout" value="10"/-->
 		<parameter key="username" value="hans"/>
 		<parameter key="password" value="wurst"/>
-	</http-client>
-    
+	</object>
+	
 	<object id="batch-1" implementation="batchelor-process-exec">
-		<parameter key="executable" value="./batch1.sh"/>
+		<parameter key="executable" value="/bin/sleep"/>
+		<parameter key="args" value="10"/>
 		<parameter key="working-directory" value="."/>
-		<parameter key="maximum-jobs-running" value="1"/>
+		<parameter key="resource-required.TASKS" value="1"/>
 	</object>
     
 	<object id="batch-2" implementation="batchelor-process-exec">
-		<parameter key="executable" value="./batch1.sh"/>
+		<parameter key="executable" value="./batch2.sh"/>
 		<parameter key="working-directory" value="."/>
-		<parameter key="maximum-jobs-running" value="1"/>
+		<parameter key="resource-required.TASKS" value="1"/>
 	</object>
-	
+    
 	<procedure implementation="batchelor-worker">
-		<parameter key="id:location"     value="on-prem"/>
-		<parameter key="id:architecture" value="amd64"/>
-		<parameter key="id:os"           value="linux"/>
+		<parameter key="metric.location"     value="on-prem"/>
+		<parameter key="metric.architecture" value="amd64"/>
+		<parameter key="metric.os"           value="linux"/>
+		<parameter key="metric.TASKS"        value="10"/>
 		
-		<parameter key="http-connection-factory-id" value="http-connection-factory-1"/>
-		<!--parameter key="http-connection-factory-id" value="http-connection-factory-2"/-->
+		<parameter key="batchelor-head-server-id" value="batchelor-head-server-1"/>
+		<parameter key="batchelor-head-server-id" value="batchelor-head-server-2"/>
 		
-		<parameter key="process-factory-id" value="batch-1"/>
-		<parameter key="process-factory-id" value="batch-2"/>
+		<!--parameter key="http-connection-factory-id" value="http-connection-factory-1"/>
+		<parameter key="http-connection-factory-id" value="http-connection-factory-2"/-->
 		
-		<parameter key="maximum-jobs-running" value="3"/>
+		<parameter key="task-factory-id" value="batch-1"/>
+		<parameter key="task-factory-id" value="batch-2"/>
 	</procedure>
 </context>

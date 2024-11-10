@@ -1,0 +1,88 @@
+<batchelor>
+    <!--plugin path="/opt/batchelor/plugin/execute.so"/-->
+    <!--plugin path="/opt/batchelor/plugin/kubectl.so"/-->
+    
+    <connection>
+        <setting key="url" value="http://127.0.0.1:8080"/>
+        <setting key="username" value="product-id"/>
+        <setting key="password" value="secret"/>
+    </connection>
+    
+    <!--connection>
+        <setting key="url" value="https://127.0.0.1:8080"/>
+        <setting key="identity-provider" value="https://127.0.0.1:8080"/>
+        <setting key="client-secret" value="product-secret"/>
+    </connection-->
+    
+    <setting key="maximum-tasks-running" value="4"/>
+    
+    <metric key="OS" value="Linux"/>
+    <metric key="CPU_ARCH" value="x86_64"/>
+    <metric key="CLOUD_ID" value="OnPrem"/>
+    
+    <event id="exec-sleep" type="exec">
+        <setting key="metrics-policy" value="allow"/>
+        <setting key="metric" value="TASK_ID"/>
+        <setting key="metric" value="CLOUD_ID"/>
+        
+        <setting key="maximum-tasks-running" value="1"/>
+        <setting key="args" value="10"/>
+        <setting key="args-flag" value="override"/>
+        <setting key="env" value="JOBID=${TASK_ID}"/>
+        <setting key="env" value="TMP_DIR=/tmp"/>
+        <setting key="env-flag-global" value="extend"/>
+        <setting key="env-flag" value="fixed"/>
+        <setting key="cd" value="/tmp/wurst"/>
+        <setting key="cd-flag" value="fixed"/>
+        <setting key="cmd" value="/usr/bin/sleep"/>
+    </event>
+    
+    <event id="exec-false" type="exec">
+        <setting key="metrics-policy" value="allow"/>
+        <setting key="metric" value="TASK_ID"/>
+        <setting key="metric" value="CLOUD_ID"/>
+        
+        <setting key="maximum-tasks-running" value="3"/>
+        <setting key="args-flag" value="fixed"/>
+        <setting key="env" value="JOBID=${TASK_ID}"/>
+        <setting key="env" value="TMP_DIR=/tmp"/>
+        <setting key="env-flag-global" value="extend"/>
+        <setting key="env-flag" value="fixed"/>
+        <setting key="cd" value="/tmp/wurst"/>
+        <setting key="cd-flag" value="fixed"/>
+        <setting key="cmd" value="/usr/bin/false"/>
+    </event>
+    
+    <event id="k8s-batch-poc" type="kubectl">
+        <setting key="metrics-policy" value="allow"/>
+        <setting key="metric" value="TASK_ID"/>
+        <setting key="metric" value="CLOUD_ID"/>
+        
+        <setting key="maximum-tasks-running" value="3"/>
+        <setting key="args-flag" value="override"/>
+        <setting key="env" value="JOBID=${TASK_ID}"/>
+        <setting key="env" value="TMP_DIR=/tmp"/>
+        <setting key="env-flag-global" value="extend"/>
+        <setting key="env-flag" value="fixed"/>
+        <setting key="cd" value="/tmp/wurst"/>
+        <setting key="cd-flag" value="fixed"/>
+        <setting key="cmd" value="/opt/bin/k8s-batch-cli"/>
+    </event>
+    
+    <event id="k8s-batch-sleep" type="kubectl">
+        <setting key="metrics-policy" value="allow"/>
+        <setting key="metric" value="TASK_ID"/>
+        <setting key="metric" value="CLOUD_ID"/>
+        
+        <setting key="maximum-tasks-running" value="3"/>
+        <setting key="args-flag" value="override"/>
+        <setting key="env" value="JOBID=${TASK_ID}"/>
+        <setting key="env" value="TMP_DIR=/tmp"/>
+        <setting key="env-flag-global" value="extend"/>
+        <setting key="env-flag" value="fixed"/>
+        <setting key="cd" value="/tmp/wurst"/>
+        <setting key="cd-flag" value="fixed"/>
+        <setting key="cmd" value="/usr/bin/sleep"/>
+    </event>
+    
+</batchelor>

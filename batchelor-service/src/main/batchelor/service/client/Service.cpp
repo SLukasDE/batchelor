@@ -1,3 +1,21 @@
+/*
+ * This file is part of Batchelor.
+ * Copyright (C) 2023-2024 Sven Lukas
+ *
+ * Batchelor is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as
+ * published by the Free Software Foundation, either version 3 of
+ * the License, or (at your option) any later version.
+ *
+ * Batchelor is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public
+ * License along with Batchelor.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #include <batchelor/service/client/Service.h>
 #include <batchelor/service/Logger.h>
 #include <batchelor/service/schemas/Signal.h>
@@ -33,10 +51,17 @@ Service::Service(const esl::com::http::client::Connection& aConnection)
 : connection(aConnection)
 { }
 
-schemas::FetchResponse Service::fetchTask(const schemas::FetchRequest& fetchRequest) {
+void Service::alive() {
+	auto response = connection.send(esl::com::http::client::Request("alive", esl::utility::HttpMethod::Type::httpGet, esl::utility::MIME::Type::textPlain), esl::io::Output(), esl::io::Input());
+    if(response.getStatusCode() != 200) {
+    	throw esl::system::Stacktrace::add(std::runtime_error("Received not supported status code \"" + std::to_string(response.getStatusCode()) + "\""));
+    }
+}
+
+schemas::FetchResponse Service::fetchTask(const std::string& namespaceId, const schemas::FetchRequest& fetchRequest) {
 	schemas::FetchResponse fetchResponse;
 
-	static const std::string serviceUrl = "fetchTask";
+	const std::string serviceUrl = "fetch-task/" + namespaceId;
     esl::com::http::client::Request request(serviceUrl, esl::utility::HttpMethod::Type::httpPost, esl::utility::MIME::Type::applicationJson);
     request.addHeader("Accept", esl::utility::MIME::toString(esl::utility::MIME::Type::applicationJson) + "," + esl::utility::MIME::toString(esl::utility::MIME::Type::applicationXml));
 
@@ -73,10 +98,10 @@ schemas::FetchResponse Service::fetchTask(const schemas::FetchRequest& fetchRequ
     return fetchResponse;
 }
 
-std::vector<schemas::TaskStatusHead> Service::getTasks(const std::string& state, const std::string& eventNotAfter, const std::string& eventNotBefore) {
+std::vector<schemas::TaskStatusHead> Service::getTasks(const std::string& namespaceId, const std::string& state, const std::string& eventNotAfter, const std::string& eventNotBefore) {
 	std::vector<schemas::TaskStatusHead> tasks;
 
-	std::string serviceUrl = "tasks";
+	std::string serviceUrl = "tasks/" + namespaceId;
 	{
 		std::string args;
 
@@ -129,10 +154,10 @@ std::vector<schemas::TaskStatusHead> Service::getTasks(const std::string& state,
     return tasks;
 }
 
-std::unique_ptr<schemas::TaskStatusHead> Service::getTask(const std::string& taskId) {
+std::unique_ptr<schemas::TaskStatusHead> Service::getTask(const std::string& namespaceId, const std::string& taskId) {
 	std::unique_ptr<schemas::TaskStatusHead> status;
 
-	std::string serviceUrl = "task/" + taskId;
+	std::string serviceUrl = "task/" + namespaceId + "/" + taskId;
     esl::com::http::client::Request request(serviceUrl, esl::utility::HttpMethod::Type::httpGet, esl::utility::MIME::Type::applicationJson);
     request.addHeader("Accept", esl::utility::MIME::toString(esl::utility::MIME::Type::applicationJson) + "," + esl::utility::MIME::toString(esl::utility::MIME::Type::applicationXml));
 
@@ -169,10 +194,10 @@ std::unique_ptr<schemas::TaskStatusHead> Service::getTask(const std::string& tas
     return status;
 }
 
-schemas::RunResponse Service::runTask(const schemas::RunRequest& runRequest) {
+schemas::RunResponse Service::runTask(const std::string& namespaceId, const schemas::RunRequest& runRequest) {
 	schemas::RunResponse runResponse;
 
-	static const std::string serviceUrl = "task";
+	const std::string serviceUrl = "task/" + namespaceId;
 
 #if 0
     std::map<std::string, std::string> requestHeaders;
@@ -221,8 +246,8 @@ schemas::RunResponse Service::runTask(const schemas::RunRequest& runRequest) {
     return runResponse;
 }
 
-void Service::sendSignal(const std::string& taskId, const std::string& signal) {
-    static const std::string serviceUrl = "signal/" + taskId + "/" + signal;
+void Service::sendSignal(const std::string& namespaceId, const std::string& taskId, const std::string& signal) {
+    const std::string serviceUrl = "signal/" + namespaceId + "/" + taskId + "/" + signal;
 
     esl::com::http::client::Request request(serviceUrl, esl::utility::HttpMethod::Type::httpPost, esl::utility::MIME::Type::applicationJson);
 
@@ -232,6 +257,44 @@ void Service::sendSignal(const std::string& taskId, const std::string& signal) {
         std::string message = "Received wrong status code  \"" + std::to_string(response.getStatusCode()) + "\" from service \"" + serviceUrl + "\"";
 		throw esl::system::Stacktrace::add(std::runtime_error(message));
     }
+}
+
+std::vector<std::string> Service::getEventTypes(const std::string& namespaceId) {
+	std::vector<std::string> eventTypes;
+
+	std::string serviceUrl = "event-types/" + namespaceId;
+
+    esl::com::http::client::Request request(serviceUrl, esl::utility::HttpMethod::Type::httpGet, esl::utility::MIME::Type::applicationJson);
+    request.addHeader("Accept", esl::utility::MIME::toString(esl::utility::MIME::Type::applicationJson) + "," + esl::utility::MIME::toString(esl::utility::MIME::Type::applicationXml));
+
+	esl::io::input::String inputWriterString;
+	esl::io::Writer& inputWriter(inputWriterString);
+	esl::io::Input input(inputWriter);
+
+	esl::com::http::client::Response response = connection.send(std::move(request), esl::io::Output(), std::move(input));
+
+    if(response.getStatusCode() == 200) {
+        if(response.getContentType() == esl::utility::MIME::Type::applicationJson) {
+        	if(!inputWriterString.getString().empty()) {
+                sergut::JsonDeserializer deSerializer(inputWriterString.getString());
+                eventTypes = deSerializer.deserializeData<std::vector<std::string>>();
+        	}
+        }
+        else if(response.getContentType() == esl::utility::MIME::Type::applicationXml) {
+        	if(!inputWriterString.getString().empty()) {
+                sergut::XmlDeserializer deSerializer(inputWriterString.getString());
+                eventTypes = deSerializer.deserializeNestedData<std::vector<std::string>>("event-types", "event-type");
+        	}
+        }
+        else {
+        	throw esl::system::Stacktrace::add(std::runtime_error("Received not supported response content type \"" + response.getContentType().toString() + "\""));
+        }
+    }
+    else {
+    	throw esl::system::Stacktrace::add(std::runtime_error("Received not supported status code \"" + std::to_string(response.getStatusCode()) + "\""));
+    }
+
+    return eventTypes;
 }
 
 } /* namespace client */

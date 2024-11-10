@@ -1,0 +1,50 @@
+<batchelor>
+    <plugin path="/opt/batchelor/plugin/execute.so"/>
+    <plugin path="/opt/batchelor/plugin/kubectl.so"/>
+    
+    <connection type="basic">
+        <setting key="url" value="http://localhost:8080"/>
+        <setting key="api-key" value="AXBS5"/>
+    </connection>
+    
+    <!--connection type="oidc">
+        <setting key="url" value="https://127.0.0.1:8080"/>
+        <setting key="identity-provider" value="https://127.0.0.1:8080"/>
+        <setting key="client-id" value="heinz"/>
+        <setting key="client-secret" value="gaul"/>
+    </connection-->
+    
+    <metric key="OS" value="zLinux"/>
+    <metric key="CLOUD_ID" value="GCP"/>
+    <!--metric key="CLOUD_ID" value="OnPrem"/-->
+    <metric key="TASKS" value="3"/>
+    
+    <event id="batch-1" type="exec">
+        <setting key="resource-required.TASKS" value="1"/>
+
+        <setting key="args" value="10"/>
+        <setting key="args-flag" value="fixed"/>
+        <setting key="env" value="JOBID=${TASK_ID}"/>
+        <setting key="env" value="TMP_DIR=/tmp"/>
+        <setting key="env-flag-global" value="extend"/>
+        <setting key="env-flag" value="fixed"/>
+        <setting key="cd" value="."/>
+        <setting key="cd-flag" value="fixed"/>
+        <setting key="cmd" value="/bin/sleep"/>
+    </event>
+    
+    <!--event id="batch-2" type="exec">
+        <setting key="resource-required.TASKS" value="1"/>
+        
+        <setting key="args" value="--propertyId=Bla --propertyFile=/etc/secret/test.pwd"/>
+        <setting key="args-flag" value="override|extend|fixed"/>
+        <setting key="env" value="JOBID=${TASK_ID}"/>
+        <setting key="env" value="TMP_DIR=/tmp"/>
+        <setting key="env-flag-global" value="override|extend"/>
+        <setting key="env-flag" value="override|extend|fixed"/>
+        <setting key="cd" value="/var/log"/>
+        <setting key="cd-flag" value="override|fixed"/>
+        <setting key="cmd" value="/opt/bin/true"/>
+    </event-->
+    
+</batchelor>

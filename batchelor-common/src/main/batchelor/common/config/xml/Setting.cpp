@@ -18,12 +18,14 @@
 
 #include <batchelor/common/config/xml/Setting.h>
 
-#include <tinyxml2/tinyxml2.h>
+#include <tinyxml2.h>
 
 #include <esl/io/FilePosition.h>
 
 #include <unistd.h>
 extern char **environ;
+
+#include <stdexcept>
 
 namespace batchelor {
 namespace common {

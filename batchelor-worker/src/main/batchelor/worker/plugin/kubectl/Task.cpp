@@ -33,7 +33,7 @@
 #endif
 #include <esl/io/output/Memory.h>
 #include <esl/io/Reader.h>
-#include <esl/system/DefaultProcess.h>
+#include <esl/system/ZSProcess.h>
 #include <esl/system/Environment.h>
 #include <esl/system/Stacktrace.h>
 #include <esl/utility/String.h>
@@ -294,7 +294,7 @@ Task::Status Task::runBatch() const noexcept {
 
 		esl::io::output::Memory deploymentYamlProducer(deploymentYAML.data(), deploymentYAML.size());
 
-		std::unique_ptr<esl::system::Process> process = esl::system::DefaultProcess::createNative();
+		std::unique_ptr<esl::system::Process> process = esl::system::ZSProcess::createNative();
 
 #ifdef MY_CONSUMER
 		MyConsumer kubectlOutput;
@@ -342,7 +342,7 @@ Task::Status Task::runBatch() const noexcept {
 
 void Task::sendCancel() const noexcept {
 	try {
-		std::unique_ptr<esl::system::Process> process = esl::system::DefaultProcess::createNative();
+		std::unique_ptr<esl::system::Process> process = esl::system::ZSProcess::createNative();
 		auto returnCode = process->execute(esl::system::Arguments(getCmd() + " delete job " + taskId));
 		taskCanceled = true;
 		logger.debug << "canceled task id " << taskId << " and received return code " << returnCode << "\n";
@@ -502,7 +502,7 @@ Task::Status Task::getJobStatus() {
 	std::string failedStr;
 
 	try {
-		std::unique_ptr<esl::system::Process> process = esl::system::DefaultProcess::createNative();
+		std::unique_ptr<esl::system::Process> process = esl::system::ZSProcess::createNative();
 
 #ifdef MY_CONSUMER
 		MyConsumer kubectlOutput;
@@ -678,7 +678,7 @@ Task::Status Task::getEventStatus() {
 	 * ******************************************************/
 
 	try {
-		std::unique_ptr<esl::system::Process> process = esl::system::DefaultProcess::createNative();
+		std::unique_ptr<esl::system::Process> process = esl::system::ZSProcess::createNative();
 
 #ifdef MY_CONSUMER
 		MyConsumer kubectlOutput;

@@ -19,7 +19,7 @@
 #ifndef BATCHELOR_COMMON_CONFIG_XML_ELEMENT_H_
 #define BATCHELOR_COMMON_CONFIG_XML_ELEMENT_H_
 
-#include <tinyxml2/tinyxml2.h>
+#include <tinyxml2.h>
 
 #include <string>
 

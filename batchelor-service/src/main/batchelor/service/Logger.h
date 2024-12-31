@@ -25,7 +25,7 @@
 namespace batchelor {
 namespace service {
 
-using Logger = esl::monitoring::Logger<esl::monitoring::Streams::Level::TRACE>;
+using Logger = esl::monitoring::Logger<esl::monitoring::Streams::Level::trace>;
 
 } /* namespace service */
 } /* namespace batchelor */

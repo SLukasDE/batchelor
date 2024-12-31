@@ -22,7 +22,7 @@
 #include <batchelor/common/config/xml/ParseElements.h>
 #include <batchelor/common/config/xml/Element.h>
 
-#include <tinyxml2/tinyxml2.h>
+#include <tinyxml2.h>
 
 #include <memory>
 #include <string>

@@ -25,7 +25,7 @@
 namespace batchelor {
 namespace common {
 
-using Logger = esl::monitoring::Logger<esl::monitoring::Streams::Level::TRACE>;
+using Logger = esl::monitoring::Logger<esl::monitoring::Streams::Level::trace>;
 
 } /* namespace common */
 } /* namespace batchelor */

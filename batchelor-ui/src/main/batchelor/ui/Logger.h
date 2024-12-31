@@ -25,7 +25,7 @@
 namespace batchelor {
 namespace ui {
 
-using Logger = esl::monitoring::Logger<esl::monitoring::Streams::Level::TRACE>;
+using Logger = esl::monitoring::Logger<esl::monitoring::Streams::Level::trace>;
 
 } /* namespace ui */
 } /* namespace batchelor */

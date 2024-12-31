@@ -223,7 +223,7 @@ Procedure::InitializedSettings::InitializedSettings(esl::object::Context& contex
 			}
 
 			bool metricFound = false;
-			for(const auto metric : settings.metrics) {
+			for(const auto& metric : settings.metrics) {
 				if(metric.first == resourceRequired.first) {
 					metricFound = true;
 

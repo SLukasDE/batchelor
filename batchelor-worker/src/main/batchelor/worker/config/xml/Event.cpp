@@ -25,7 +25,7 @@
 #include <esl/plugin/exception/PluginNotFound.h>
 #include <esl/plugin/Registry.h>
 
-#include <tinyxml2/tinyxml2.h>
+#include <tinyxml2.h>
 
 #include <stdexcept>
 

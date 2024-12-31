@@ -24,13 +24,14 @@
 
 #include <batchelor/service/schemas/Setting.h>
 
-#include <esl/system/DefaultProcess.h>
+#include <esl/system/ZSProcess.h>
 #include <esl/system/Environment.h>
 #include <esl/system/Stacktrace.h>
 #include <esl/system/Signal.h>
 #include <esl/utility/String.h>
 
 #include <cstdlib>
+#include <filesystem>
 #include <mutex>
 #include <stdexcept>
 
@@ -162,7 +163,7 @@ Task::Task(TaskFactory& aTaskFactoryExec, std::condition_variable& aNotifyCV, st
 		envs.push_back(env);
 	}
 
-	process = esl::system::DefaultProcess::createNative();
+	process = esl::system::ZSProcess::createNative();
 	if(!process) {
 		throw std::runtime_error("No process instance available to execute a process.");
 	}
@@ -171,7 +172,7 @@ Task::Task(TaskFactory& aTaskFactoryExec, std::condition_variable& aNotifyCV, st
 	process->setEnvironment(std::unique_ptr<esl::system::Environment>(new esl::system::Environment(std::move(envs))));
 //	}
 
-	boost::filesystem::create_directories(settings.cd);
+	std::filesystem::create_directories(settings.cd);
 	process->setWorkingDir(settings.cd);
 
 #if 0

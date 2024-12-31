@@ -19,14 +19,14 @@
 #include <batchelor/common/config/args/ArgumentsException.h>
 #include <batchelor/common/Main.h>
 
-#include <esl/Plugin.h>
+#include <openesl/Plugin.h>
 
 #include <esl/crypto/GTXKeyStore.h>
 #include <esl/monitoring/LogbookLogging.h>
 #include <esl/plugin/exception/PluginNotFound.h>
 #include <esl/plugin/Registry.h>
-#include <esl/system/DefaultSignalManager.h>
-#include <esl/system/DefaultStacktraceFactory.h>
+#include <esl/system/ZSSignalManager.h>
+#include <esl/system/ZSStacktraceFactory.h>
 
 #include <fstream>
 #include <iostream>
@@ -39,19 +39,25 @@ Main::Main(int(*run)(int, const char**), void(*printUsage)(), int argc, const ch
 {
 	rc = -1;
 
+    struct RegistryGuard {
+        ~RegistryGuard() {
+            esl::plugin::Registry::cleanup();
+        }
+    } registryGuard;
+
 	try {
 		esl::plugin::Registry& registry(esl::plugin::Registry::get());
-		esl::Plugin::install(registry, nullptr);
+        openesl::Plugin::install(registry, nullptr);
 		registry.setObject(esl::crypto::GTXKeyStore::createNative());
-		registry.setObject(esl::system::DefaultStacktraceFactory::createNative());
+		//registry.setObject(esl::system::ZSStacktraceFactory::createNative());
 #if 1
 		{
-			esl::system::DefaultSignalManager::Settings aSettings;
+			esl::system::ZSSignalManager::Settings aSettings;
 			aSettings.isThreaded = true;
-			registry.setObject(esl::system::DefaultSignalManager::createNative(aSettings));
+			registry.setObject(esl::system::ZSSignalManager::createNative(aSettings));
 		}
 #else
-		registry.setObject(esl::system::DefaultSignalManager::createNative(esl::system::DefaultSignalManager::Settings(std::vector<std::pair<std::string, std::string>>({{"is-threaded", "true"}}))));
+		registry.setObject(esl::system::ZSSignalManager::createNative(esl::system::ZSSignalManager::Settings(std::vector<std::pair<std::string, std::string>>({{"is-threaded", "true"}}))));
 #endif
 
 		if(!std::ifstream("logger.xml").fail()) {

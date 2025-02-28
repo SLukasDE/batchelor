@@ -1,5 +1,5 @@
 <jerry>
-	<library file="./build/batchelor-head/0.0.1/default/architecture/linux-gcc/link-dynamic/libbatchelor-head.so"/>
+	<library file="./build/batchelor-head/1.0.0/default/architecture/linux-gcc/link-dynamic/libbatchelor-head.so"/>
 	
 	<http-server implementation="esl/com/http/server/MHDSocket">
 		<parameter key="https" value="false"/>

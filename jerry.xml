@@ -1,6 +1,6 @@
 <jerry>
-	<library file="./batchelor-head/build/batchelor-head/0.0.1/default/architecture/linux-gcc/link-dynamic/libbatchelor-head.so"/>
-	<library file="./batchelor-ui/build/batchelor-ui/0.0.1/default/architecture/linux-gcc/link-dynamic/libbatchelor-ui.so"/>
+	<library file="./batchelor-head/build/batchelor-head/1.0.0/default/architecture/linux-gcc/link-dynamic/libbatchelor-head.so"/>
+	<library file="./batchelor-ui/build/batchelor-ui/1.0.0/default/architecture/linux-gcc/link-dynamic/libbatchelor-ui.so"/>
 	
 	<object id="batchelor-head-server-1" implementation="batchelor-connection-basic">
 		<parameter key="url" value="http://localhost:8080"/>

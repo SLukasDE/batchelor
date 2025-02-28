@@ -1,3 +1,3 @@
 #!/bin/sh
 
-toolcontainer ./build/batchelor-worker/0.0.1/default/architecture/linux-gcc/link-executable/batchelor-worker -f config.example.xml
+./build/batchelor-worker/1.0.0/default/architecture/linux-gcc/link-executable/batchelor-worker -f config.example.xml

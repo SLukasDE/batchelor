@@ -1,5 +1,5 @@
-<context>
-	<library file="./build/batchelor-worker/0.0.1/default/architecture/linux-gcc/link-dynamic/libbatchelor-worker.so"/>
+<jerry>
+	<library file="./build/batchelor-worker/1.0.0/default/architecture/linux-gcc/link-dynamic/libbatchelor-worker.so"/>
 	
 	<object id="batchelor-head-server-1" implementation="batchelor-connection-basic">
 		<parameter key="url" value="http://localhost:8080"/>
@@ -43,4 +43,4 @@
 		<parameter key="task-factory-id" value="batch-1"/>
 		<parameter key="task-factory-id" value="batch-2"/>
 	</procedure>
-</context>
+</jerry>

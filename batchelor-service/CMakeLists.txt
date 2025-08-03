@@ -3,8 +3,8 @@ find_package(openesl REQUIRED)
 
 add_subdirectory(src/main)
 
-add_library(batchelor-common::batchelor-common ALIAS batchelor-common)
+add_library(batchelor-service::batchelor-service ALIAS batchelor-service)
 
-target_link_libraries(batchelor-common PUBLIC
+target_link_libraries(batchelor-service PUBLIC
     sergut::sergut
     openesl::openesl)
